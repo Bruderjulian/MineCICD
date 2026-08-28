@@ -33,26 +33,31 @@ public class BaseCommand implements CommandExecutor {
         } else {
             subCommand = args[0].toLowerCase(Locale.getDefault());
         }
-        
-        // Special case for pull command - always allow it through to initialize repository
+
+        // Special case for pull command - always allow it through to initialize
+        // repository
         if (!subCommand.equals("pull") && !subCommand.equals("help") && !subCommand.equals("reload")) {
             // Check if repository is initialized before continuing with other commands
             if (!GitUtils.activeRepoExists()) {
                 String repo = Config.getString("git.repo");
                 String branch = Config.getString("git.branch");
-                sender.sendMessage(getRichMessage("pull-repo-not-initialized", true, new HashMap<String, String>() {{
-                    put("label", label);
-                    put("repo", repo);
-                    put("branch", branch);
-                }}));
+                sender.sendMessage(getRichMessage("pull-repo-not-initialized", true, new HashMap<String, String>() {
+                    {
+                        put("label", label);
+                        put("repo", repo);
+                        put("branch", branch);
+                    }
+                }));
                 return true;
             }
         }
 
         if (!sender.hasPermission("minecicd." + subCommand)) {
-            sender.sendMessage(getRichMessage("no-permission", true, new HashMap<String, String>() {{
-                put("label", label);
-            }}));
+            sender.sendMessage(getRichMessage("no-permission", true, new HashMap<String, String>() {
+                {
+                    put("label", label);
+                }
+            }));
             return true;
         }
 
@@ -69,9 +74,11 @@ public class BaseCommand implements CommandExecutor {
             switch (subCommand) {
                 case "add": {
                     if (args.length != 2) {
-                        sender.sendMessage(getRichMessage("add-usage", true, new HashMap<String, String>() {{
-                            put("label", label);
-                        }}));
+                        sender.sendMessage(getRichMessage("add-usage", true, new HashMap<String, String>() {
+                            {
+                                put("label", label);
+                            }
+                        }));
                         return;
                     }
 
@@ -83,9 +90,11 @@ public class BaseCommand implements CommandExecutor {
                     for (String c : children) {
                         File next = new File(current, c);
                         if (!next.exists()) {
-                            sender.sendMessage(getRichMessage("add-failed", true, new HashMap<String, String>() {{
-                                put("error", "Target path does not exist");
-                            }}));
+                            sender.sendMessage(getRichMessage("add-failed", true, new HashMap<String, String>() {
+                                {
+                                    put("error", "Target path does not exist");
+                                }
+                            }));
                             return;
                         }
                         current = next;
@@ -93,16 +102,20 @@ public class BaseCommand implements CommandExecutor {
 
                     if (child.endsWith("/") || child.endsWith("\\")) {
                         if (!current.isDirectory()) {
-                            sender.sendMessage(getRichMessage("add-failed", true, new HashMap<String, String>() {{
-                                put("error", "Target path is not a directory");
-                            }}));
+                            sender.sendMessage(getRichMessage("add-failed", true, new HashMap<String, String>() {
+                                {
+                                    put("error", "Target path is not a directory");
+                                }
+                            }));
                             return;
                         }
                     } else {
                         if (current.isDirectory()) {
-                            sender.sendMessage(getRichMessage("add-failed", true, new HashMap<String, String>() {{
-                                put("error", "Target path is a directory");
-                            }}));
+                            sender.sendMessage(getRichMessage("add-failed", true, new HashMap<String, String>() {
+                                {
+                                    put("error", "Target path is a directory");
+                                }
+                            }));
                             return;
                         }
                     }
@@ -118,22 +131,28 @@ public class BaseCommand implements CommandExecutor {
                         addedAmount = GitUtils.add(current, author);
                     } catch (Exception e) {
                         MineCICD.logError(e);
-                        sender.sendMessage(getRichMessage("add-failed", true, new HashMap<String, String>() {{
-                            put("error", e.getMessage());
-                        }}));
+                        sender.sendMessage(getRichMessage("add-failed", true, new HashMap<String, String>() {
+                            {
+                                put("error", e.getMessage());
+                            }
+                        }));
                         return;
                     }
 
-                    sender.sendMessage(getRichMessage("add-success", true, new HashMap<String, String>() {{
-                        put("amount", String.valueOf(addedAmount));
-                    }}));
+                    sender.sendMessage(getRichMessage("add-success", true, new HashMap<String, String>() {
+                        {
+                            put("amount", String.valueOf(addedAmount));
+                        }
+                    }));
                     break;
                 }
                 case "remove": {
                     if (args.length != 2) {
-                        sender.sendMessage(getRichMessage("remove-usage", true, new HashMap<String, String>() {{
-                            put("label", label);
-                        }}));
+                        sender.sendMessage(getRichMessage("remove-usage", true, new HashMap<String, String>() {
+                            {
+                                put("label", label);
+                            }
+                        }));
                         return;
                     }
 
@@ -145,9 +164,11 @@ public class BaseCommand implements CommandExecutor {
                     for (String c : children) {
                         File next = new File(current, c);
                         if (!next.exists()) {
-                            sender.sendMessage(getRichMessage("remove-failed", true, new HashMap<String, String>() {{
-                                put("error", "Target path does not exist");
-                            }}));
+                            sender.sendMessage(getRichMessage("remove-failed", true, new HashMap<String, String>() {
+                                {
+                                    put("error", "Target path does not exist");
+                                }
+                            }));
                             return;
                         }
                         current = next;
@@ -155,16 +176,20 @@ public class BaseCommand implements CommandExecutor {
 
                     if (child.endsWith("/") || child.endsWith("\\")) {
                         if (!current.isDirectory()) {
-                            sender.sendMessage(getRichMessage("remove-failed", true, new HashMap<String, String>() {{
-                                put("error", "Target path is not a directory");
-                            }}));
+                            sender.sendMessage(getRichMessage("remove-failed", true, new HashMap<String, String>() {
+                                {
+                                    put("error", "Target path is not a directory");
+                                }
+                            }));
                             return;
                         }
                     } else {
                         if (current.isDirectory()) {
-                            sender.sendMessage(getRichMessage("remove-failed", true, new HashMap<String, String>() {{
-                                put("error", "Target path is a directory");
-                            }}));
+                            sender.sendMessage(getRichMessage("remove-failed", true, new HashMap<String, String>() {
+                                {
+                                    put("error", "Target path is a directory");
+                                }
+                            }));
                             return;
                         }
                     }
@@ -180,22 +205,28 @@ public class BaseCommand implements CommandExecutor {
                         removedAmount = GitUtils.remove(current, author);
                     } catch (Exception e) {
                         MineCICD.logError(e);
-                        sender.sendMessage(getRichMessage("remove-failed", true, new HashMap<String, String>() {{
-                            put("error", e.getMessage());
-                        }}));
+                        sender.sendMessage(getRichMessage("remove-failed", true, new HashMap<String, String>() {
+                            {
+                                put("error", e.getMessage());
+                            }
+                        }));
                         return;
                     }
 
-                    sender.sendMessage(getRichMessage("remove-success", true, new HashMap<String, String>() {{
-                        put("amount", String.valueOf(removedAmount));
-                    }}));
+                    sender.sendMessage(getRichMessage("remove-success", true, new HashMap<String, String>() {
+                        {
+                            put("amount", String.valueOf(removedAmount));
+                        }
+                    }));
                     break;
                 }
                 case "pull": {
                     if (args.length != 1 && args.length != 2) {
-                        sender.sendMessage(getRichMessage("pull-usage", true, new HashMap<String, String>() {{
-                            put("label", label);
-                        }}));
+                        sender.sendMessage(getRichMessage("pull-usage", true, new HashMap<String, String>() {
+                            {
+                                put("label", label);
+                            }
+                        }));
                         return;
                     }
 
@@ -203,22 +234,29 @@ public class BaseCommand implements CommandExecutor {
                     if (args.length == 2 && args[1].equalsIgnoreCase("force")) {
                         forceOverwriteChanges = true;
                     } else if (args.length == 2) {
-                        sender.sendMessage(getRichMessage("pull-usage", true, new HashMap<String, String>() {{
-                            put("label", label);
-                        }}));
+                        sender.sendMessage(getRichMessage("pull-usage", true, new HashMap<String, String>() {
+                            {
+                                put("label", label);
+                            }
+                        }));
                         return;
                     }
 
                     if (!GitUtils.getLocalChanges().isEmpty() && !forceOverwriteChanges) {
-                        String bar = MineCICD.addBar(getCleanMessage("bossbar-pull-aborted-changes", true), BarColor.YELLOW, BarStyle.SEGMENTED_12);
+                        String bar = MineCICD.addBar(getCleanMessage("bossbar-pull-aborted-changes", true),
+                                BarColor.YELLOW, BarStyle.SEGMENTED_12);
                         MineCICD.removeBar(bar, Config.getInt("bossbar.duration"));
-                        sender.sendMessage(getRichMessage("pull-aborted", true, new HashMap<String, String>() {{
-                            put("label", label);
-                        }}));
+                        sender.sendMessage(getRichMessage("pull-aborted", true, new HashMap<String, String>() {
+                            {
+                                put("label", label);
+                            }
+                        }));
                         for (String change : GitUtils.getLocalChanges()) {
-                            sender.sendMessage(getRichMessage("pull-change", false, new HashMap<String, String>() {{
-                                put("change", change);
-                            }}));
+                            sender.sendMessage(getRichMessage("pull-change", false, new HashMap<String, String>() {
+                                {
+                                    put("change", change);
+                                }
+                            }));
                         }
                         return;
                     }
@@ -229,19 +267,24 @@ public class BaseCommand implements CommandExecutor {
                     } catch (Exception e) {
                         MineCICD.logError(e);
                         // Provide a more user-friendly message for common initialization errors
-                        if (e.getMessage() != null && (e.getMessage().contains("Ref HEAD cannot be resolved") || 
-                            e.getMessage().contains("Remote origin did not advertise Ref for branch"))) {
+                        if (e.getMessage() != null && (e.getMessage().contains("Ref HEAD cannot be resolved") ||
+                                e.getMessage().contains("Remote origin did not advertise Ref for branch"))) {
                             String repo = Config.getString("git.repo");
                             String branch = Config.getString("git.branch");
-                            sender.sendMessage(getRichMessage("pull-repo-not-initialized", true, new HashMap<String, String>() {{
-                                put("label", label);
-                                put("repo", repo);
-                                put("branch", branch);
-                            }}));
+                            sender.sendMessage(
+                                    getRichMessage("pull-repo-not-initialized", true, new HashMap<String, String>() {
+                                        {
+                                            put("label", label);
+                                            put("repo", repo);
+                                            put("branch", branch);
+                                        }
+                                    }));
                         } else {
-                            sender.sendMessage(getRichMessage("pull-failed", true, new HashMap<String, String>() {{
-                                put("error", e.getMessage());
-                            }}));
+                            sender.sendMessage(getRichMessage("pull-failed", true, new HashMap<String, String>() {
+                                {
+                                    put("error", e.getMessage());
+                                }
+                            }));
                         }
                         return;
                     }
@@ -255,9 +298,11 @@ public class BaseCommand implements CommandExecutor {
                 }
                 case "push": {
                     if (args.length < 2) {
-                        sender.sendMessage(getRichMessage("push-usage", true, new HashMap<String, String>() {{
-                            put("label", label);
-                        }}));
+                        sender.sendMessage(getRichMessage("push-usage", true, new HashMap<String, String>() {
+                            {
+                                put("label", label);
+                            }
+                        }));
                         return;
                     }
 
@@ -273,9 +318,11 @@ public class BaseCommand implements CommandExecutor {
                         GitUtils.push(message, author);
                     } catch (Exception e) {
                         MineCICD.logError(e);
-                        sender.sendMessage(getRichMessage("push-failed", true, new HashMap<String, String>() {{
-                            put("error", e.getMessage());
-                        }}));
+                        sender.sendMessage(getRichMessage("push-failed", true, new HashMap<String, String>() {
+                            {
+                                put("error", e.getMessage());
+                            }
+                        }));
                         return;
                     }
 
@@ -284,9 +331,11 @@ public class BaseCommand implements CommandExecutor {
                 }
                 case "reset": {
                     if (args.length != 2) {
-                        sender.sendMessage(getRichMessage("reset-usage", true, new HashMap<String, String>() {{
-                            put("label", label);
-                        }}));
+                        sender.sendMessage(getRichMessage("reset-usage", true, new HashMap<String, String>() {
+                            {
+                                put("label", label);
+                            }
+                        }));
                         return;
                     }
 
@@ -297,9 +346,11 @@ public class BaseCommand implements CommandExecutor {
                     }
 
                     if (commit.length() != 40) {
-                        sender.sendMessage(getRichMessage("reset-invalid-commit", true, new HashMap<String, String>() {{
-                            put("label", label);
-                        }}));
+                        sender.sendMessage(getRichMessage("reset-invalid-commit", true, new HashMap<String, String>() {
+                            {
+                                put("label", label);
+                            }
+                        }));
                         return;
                     }
 
@@ -307,9 +358,11 @@ public class BaseCommand implements CommandExecutor {
                         GitUtils.reset(commit);
                     } catch (Exception e) {
                         MineCICD.logError(e);
-                        sender.sendMessage(getRichMessage("reset-failed", true, new HashMap<String, String>() {{
-                            put("error", e.getMessage());
-                        }}));
+                        sender.sendMessage(getRichMessage("reset-failed", true, new HashMap<String, String>() {
+                            {
+                                put("error", e.getMessage());
+                            }
+                        }));
                         return;
                     }
 
@@ -318,9 +371,11 @@ public class BaseCommand implements CommandExecutor {
                 }
                 case "revert": {
                     if (args.length != 2) {
-                        sender.sendMessage(getRichMessage("revert-usage", true, new HashMap<String, String>() {{
-                            put("label", label);
-                        }}));
+                        sender.sendMessage(getRichMessage("revert-usage", true, new HashMap<String, String>() {
+                            {
+                                put("label", label);
+                            }
+                        }));
                         return;
                     }
 
@@ -331,9 +386,11 @@ public class BaseCommand implements CommandExecutor {
                     }
 
                     if (commit.length() != 40) {
-                        sender.sendMessage(getRichMessage("revert-invalid-commit", true, new HashMap<String, String>() {{
-                            put("label", label);
-                        }}));
+                        sender.sendMessage(getRichMessage("revert-invalid-commit", true, new HashMap<String, String>() {
+                            {
+                                put("label", label);
+                            }
+                        }));
                         return;
                     }
 
@@ -341,9 +398,11 @@ public class BaseCommand implements CommandExecutor {
                         GitUtils.revert(commit);
                     } catch (Exception e) {
                         MineCICD.logError(e);
-                        sender.sendMessage(getRichMessage("revert-failed", true, new HashMap<String, String>() {{
-                            put("error", e.getMessage());
-                        }}));
+                        sender.sendMessage(getRichMessage("revert-failed", true, new HashMap<String, String>() {
+                            {
+                                put("error", e.getMessage());
+                            }
+                        }));
                         return;
                     }
 
@@ -352,9 +411,11 @@ public class BaseCommand implements CommandExecutor {
                 }
                 case "rollback": {
                     if (args.length != 3) {
-                        sender.sendMessage(getRichMessage("rollback-usage", true, new HashMap<String, String>() {{
-                            put("label", label);
-                        }}));
+                        sender.sendMessage(getRichMessage("rollback-usage", true, new HashMap<String, String>() {
+                            {
+                                put("label", label);
+                            }
+                        }));
                         return;
                     }
 
@@ -367,16 +428,20 @@ public class BaseCommand implements CommandExecutor {
                         calendar.setTime(new SimpleDateFormat("dd.MM.yyyy HH:mm:ss").parse(dateTime));
                     } catch (Exception e) {
                         MineCICD.logError(e);
-                        sender.sendMessage(getRichMessage("rollback-invalid-date", true, new HashMap<String, String>() {{
-                            put("label", label);
-                        }}));
+                        sender.sendMessage(getRichMessage("rollback-invalid-date", true, new HashMap<String, String>() {
+                            {
+                                put("label", label);
+                            }
+                        }));
                         return;
                     }
 
                     if (calendar.after(Calendar.getInstance())) {
-                        sender.sendMessage(getRichMessage("rollback-future-date", true, new HashMap<String, String>() {{
-                            put("label", label);
-                        }}));
+                        sender.sendMessage(getRichMessage("rollback-future-date", true, new HashMap<String, String>() {
+                            {
+                                put("label", label);
+                            }
+                        }));
                         return;
                     }
 
@@ -384,9 +449,11 @@ public class BaseCommand implements CommandExecutor {
                         GitUtils.rollback(calendar);
                     } catch (Exception e) {
                         MineCICD.logError(e);
-                        sender.sendMessage(getRichMessage("rollback-failed", true, new HashMap<String, String>() {{
-                            put("error", e.getMessage());
-                        }}));
+                        sender.sendMessage(getRichMessage("rollback-failed", true, new HashMap<String, String>() {
+                            {
+                                put("error", e.getMessage());
+                            }
+                        }));
                         return;
                     }
 
@@ -395,9 +462,11 @@ public class BaseCommand implements CommandExecutor {
                 }
                 case "log": {
                     if (args.length != 2) {
-                        sender.sendMessage(getRichMessage("log-usage", true, new HashMap<String, String>() {{
-                            put("label", label);
-                        }}));
+                        sender.sendMessage(getRichMessage("log-usage", true, new HashMap<String, String>() {
+                            {
+                                put("label", label);
+                            }
+                        }));
                         return;
                     }
 
@@ -423,10 +492,12 @@ public class BaseCommand implements CommandExecutor {
                             }
 
                             StringBuilder messageBuilder = new StringBuilder();
-                            messageBuilder.append(getMessage("log-list-header", false, new HashMap<String, String>() {{
-                                put("page", String.valueOf(page));
-                                put("maxPage", String.valueOf(pages));
-                            }}));
+                            messageBuilder.append(getMessage("log-list-header", false, new HashMap<String, String>() {
+                                {
+                                    put("page", String.valueOf(page));
+                                    put("maxPage", String.valueOf(pages));
+                                }
+                            }));
                             messageBuilder.append("\n");
 
                             for (RevCommit commit : returnable) {
@@ -441,12 +512,14 @@ public class BaseCommand implements CommandExecutor {
                                     message = message.substring(0, 40) + "...";
                                 }
                                 String finalMessage = message.trim();
-                                messageBuilder.append(getMessage("log-list-line", false, new HashMap<String, String>() {{
-                                    put("revision", commit.getName().substring(0, 7));
-                                    put("author", author);
-                                    put("date", new java.text.SimpleDateFormat("dd.MM.yyyy HH:mm:ss").format(date));
-                                    put("message", finalMessage);
-                                }}));
+                                messageBuilder.append(getMessage("log-list-line", false, new HashMap<String, String>() {
+                                    {
+                                        put("revision", commit.getName().substring(0, 7));
+                                        put("author", author);
+                                        put("date", new java.text.SimpleDateFormat("dd.MM.yyyy HH:mm:ss").format(date));
+                                        put("message", finalMessage);
+                                    }
+                                }));
                                 messageBuilder.append("\n");
                             }
 
@@ -454,9 +527,11 @@ public class BaseCommand implements CommandExecutor {
                             sender.sendMessage(Messages.messageToComponent(messageBuilder.toString()));
                         } catch (Exception e) {
                             MineCICD.logError(e);
-                            sender.sendMessage(getRichMessage("log-failed", true, new HashMap<String, String>() {{
-                                put("error", e.getMessage());
-                            }}));
+                            sender.sendMessage(getRichMessage("log-failed", true, new HashMap<String, String>() {
+                                {
+                                    put("error", e.getMessage());
+                                }
+                            }));
                             return;
                         }
                     } catch (NumberFormatException ignored) {
@@ -466,9 +541,12 @@ public class BaseCommand implements CommandExecutor {
                             }
 
                             if (arg.length() != 40) {
-                                sender.sendMessage(getRichMessage("log-invalid-commit", true, new HashMap<String, String>() {{
-                                    put("label", label);
-                                }}));
+                                sender.sendMessage(
+                                        getRichMessage("log-invalid-commit", true, new HashMap<String, String>() {
+                                            {
+                                                put("label", label);
+                                            }
+                                        }));
                                 return;
                             }
 
@@ -513,20 +591,26 @@ public class BaseCommand implements CommandExecutor {
 
                                 String finalCommitMsg = message;
                                 String finalChanges = changes;
-                                String rawMsg = Messages.getMessage("log-single-commit", false, new HashMap<String, String>() {{
-                                    put("revision", commit.getName());
-                                    put("author", author);
-                                    put("date", new java.text.SimpleDateFormat("dd.MM.yyyy HH:mm:ss").format(date));
-                                    put("message", finalCommitMsg);
-                                    put("changes", finalChanges);
-                                }});
+                                String rawMsg = Messages.getMessage("log-single-commit", false,
+                                        new HashMap<String, String>() {
+                                            {
+                                                put("revision", commit.getName());
+                                                put("author", author);
+                                                put("date", new java.text.SimpleDateFormat("dd.MM.yyyy HH:mm:ss")
+                                                        .format(date));
+                                                put("message", finalCommitMsg);
+                                                put("changes", finalChanges);
+                                            }
+                                        });
                                 sender.sendMessage(Messages.messageToComponent(rawMsg));
                             }
                         } catch (Exception e) {
                             MineCICD.logError(e);
-                            sender.sendMessage(getRichMessage("log-failed", true, new HashMap<String, String>() {{
-                                put("error", e.getMessage());
-                            }}));
+                            sender.sendMessage(getRichMessage("log-failed", true, new HashMap<String, String>() {
+                                {
+                                    put("error", e.getMessage());
+                                }
+                            }));
                             return;
                         }
                     }
@@ -534,9 +618,11 @@ public class BaseCommand implements CommandExecutor {
                 }
                 case "reload": {
                     if (args.length != 1) {
-                        sender.sendMessage(getRichMessage("reload-usage", true, new HashMap<String, String>() {{
-                            put("label", label);
-                        }}));
+                        sender.sendMessage(getRichMessage("reload-usage", true, new HashMap<String, String>() {
+                            {
+                                put("label", label);
+                            }
+                        }));
                         return;
                     }
 
@@ -544,29 +630,36 @@ public class BaseCommand implements CommandExecutor {
                         MineCICD.reload();
                     } catch (Exception e) {
                         MineCICD.logError(e);
-                        sender.sendMessage(getRichMessage("reload-failed", true, new HashMap<String, String>() {{
-                            put("error", e.getMessage());
-                        }}));
+                        sender.sendMessage(getRichMessage("reload-failed", true, new HashMap<String, String>() {
+                            {
+                                put("error", e.getMessage());
+                            }
+                        }));
                         return;
                     }
                     sender.sendMessage(getRichMessage("reload-success", true));
 
-                    String bar = MineCICD.addBar(getCleanMessage("bossbar-reloaded", true), BarColor.GREEN, BarStyle.SOLID);
+                    String bar = MineCICD.addBar(getCleanMessage("bossbar-reloaded", true), BarColor.GREEN,
+                            BarStyle.SOLID);
                     MineCICD.removeBar(bar, Config.getInt("bossbar.duration"));
                     break;
                 }
                 case "diff": {
                     if (args.length != 2) {
-                        sender.sendMessage(getRichMessage("diff-usage", true, new HashMap<String, String>() {{
-                            put("label", label);
-                        }}));
+                        sender.sendMessage(getRichMessage("diff-usage", true, new HashMap<String, String>() {
+                            {
+                                put("label", label);
+                            }
+                        }));
                         return;
                     }
 
                     if (!args[1].equalsIgnoreCase("local") && !args[1].equalsIgnoreCase("remote")) {
-                        sender.sendMessage(getRichMessage("diff-usage", true, new HashMap<String, String>() {{
-                            put("label", label);
-                        }}));
+                        sender.sendMessage(getRichMessage("diff-usage", true, new HashMap<String, String>() {
+                            {
+                                put("label", label);
+                            }
+                        }));
                         return;
                     }
 
@@ -584,9 +677,11 @@ public class BaseCommand implements CommandExecutor {
                         }
                     } catch (Exception e) {
                         MineCICD.logError(e);
-                        sender.sendMessage(getRichMessage("diff-failed", true, new HashMap<String, String>() {{
-                            put("error", e.getMessage());
-                        }}));
+                        sender.sendMessage(getRichMessage("diff-failed", true, new HashMap<String, String>() {
+                            {
+                                put("error", e.getMessage());
+                            }
+                        }));
                         return;
                     }
 
@@ -600,9 +695,11 @@ public class BaseCommand implements CommandExecutor {
                         sender.sendMessage(getRichMessage("diff-no-changes", false));
                     } else {
                         for (String change : changes) {
-                            sender.sendMessage(getRichMessage("diff-line", false, new HashMap<String, String>() {{
-                                put("change", change);
-                            }}));
+                            sender.sendMessage(getRichMessage("diff-line", false, new HashMap<String, String>() {
+                                {
+                                    put("change", change);
+                                }
+                            }));
                         }
                     }
 
@@ -612,9 +709,11 @@ public class BaseCommand implements CommandExecutor {
                 }
                 case "status": {
                     if (args.length != 1) {
-                        sender.sendMessage(getRichMessage("status-usage", true, new HashMap<String, String>() {{
-                            put("label", label);
-                        }}));
+                        sender.sendMessage(getRichMessage("status-usage", true, new HashMap<String, String>() {
+                            {
+                                put("label", label);
+                            }
+                        }));
                         return;
                     }
 
@@ -630,7 +729,8 @@ public class BaseCommand implements CommandExecutor {
                     } catch (IOException e) {
                         throw new RuntimeException(e);
                     }
-                    String webHookAddress = "http://" + serverIp + ":" + Config.getInt("webhooks.port") + "/" + Config.getString("webhooks.path");
+                    String webHookAddress = "http://" + serverIp + ":" + Config.getInt("webhooks.port") + "/"
+                            + Config.getString("webhooks.path");
 
                     int localChanges = GitUtils.getLocalChanges().size();
                     int remoteChanges;
@@ -642,27 +742,34 @@ public class BaseCommand implements CommandExecutor {
                     }
 
                     int finalRemoteChanges = remoteChanges;
-                    sender.sendMessage(getRichMessage("status", true, new HashMap<String, String>() {{
-                        put("remote", remote);
-                        put("branch", branch);
-                        put("webhook-status", String.valueOf(webHookEnabled));
-                        put("webhook-address", webHookAddress);
-                        put("local-changes", String.valueOf(localChanges));
-                        put("remote-changes", finalRemoteChanges == -1 ? "N/A" : String.valueOf(finalRemoteChanges));
-                    }}));
+                    sender.sendMessage(getRichMessage("status", true, new HashMap<String, String>() {
+                        {
+                            put("remote", remote);
+                            put("branch", branch);
+                            put("webhook-status", String.valueOf(webHookEnabled));
+                            put("webhook-address", webHookAddress);
+                            put("local-changes", String.valueOf(localChanges));
+                            put("remote-changes",
+                                    finalRemoteChanges == -1 ? "N/A" : String.valueOf(finalRemoteChanges));
+                        }
+                    }));
                     break;
                 }
                 case "help": {
-                    sender.sendMessage(getRichMessage("help", false, new HashMap<String, String>() {{
-                        put("label", label);
-                    }}));
+                    sender.sendMessage(getRichMessage("help", false, new HashMap<String, String>() {
+                        {
+                            put("label", label);
+                        }
+                    }));
                     break;
                 }
                 case "script": {
                     if (args.length != 2) {
-                        sender.sendMessage(getRichMessage("script-usage", true, new HashMap<String, String>() {{
-                            put("label", label);
-                        }}));
+                        sender.sendMessage(getRichMessage("script-usage", true, new HashMap<String, String>() {
+                            {
+                                put("label", label);
+                            }
+                        }));
                         return;
                     }
 
@@ -674,18 +781,22 @@ public class BaseCommand implements CommandExecutor {
                         Script.run(script);
                     } catch (Exception e) {
                         MineCICD.logError(e);
-                        sender.sendMessage(getRichMessage("script-failed", true, new HashMap<String, String>() {{
-                            put("error", e.getMessage());
-                        }}));
+                        sender.sendMessage(getRichMessage("script-failed", true, new HashMap<String, String>() {
+                            {
+                                put("error", e.getMessage());
+                            }
+                        }));
                         return;
                     }
                     break;
                 }
                 case "resolve": {
                     if (args.length != 2) {
-                        sender.sendMessage(getRichMessage("resolve-usage", true, new HashMap<String, String>() {{
-                            put("label", label);
-                        }}));
+                        sender.sendMessage(getRichMessage("resolve-usage", true, new HashMap<String, String>() {
+                            {
+                                put("label", label);
+                            }
+                        }));
                         return;
                     }
 
@@ -695,14 +806,20 @@ public class BaseCommand implements CommandExecutor {
                                 GitUtils.mergeAbort();
                             } catch (Exception e) {
                                 MineCICD.logError(e);
-                                sender.sendMessage(getRichMessage("resolve-failed-merge-abort", true, new HashMap<String, String>() {{
-                                    put("error", e.getMessage());
-                                }}));
+                                sender.sendMessage(getRichMessage("resolve-failed-merge-abort", true,
+                                        new HashMap<String, String>() {
+                                            {
+                                                put("error", e.getMessage());
+                                            }
+                                        }));
                                 return;
                             }
-                            sender.sendMessage(getRichMessage("resolve-success-merge-abort", true, new HashMap<String, String>() {{
-                                put("label", label);
-                            }}));
+                            sender.sendMessage(
+                                    getRichMessage("resolve-success-merge-abort", true, new HashMap<String, String>() {
+                                        {
+                                            put("label", label);
+                                        }
+                                    }));
                             break;
                         }
                         case "repo-reset": {
@@ -710,14 +827,20 @@ public class BaseCommand implements CommandExecutor {
                                 GitUtils.repoReset();
                             } catch (Exception e) {
                                 MineCICD.logError(e);
-                                sender.sendMessage(getRichMessage("resolve-failed-repo-reset", true, new HashMap<String, String>() {{
-                                    put("error", e.getMessage());
-                                }}));
+                                sender.sendMessage(getRichMessage("resolve-failed-repo-reset", true,
+                                        new HashMap<String, String>() {
+                                            {
+                                                put("error", e.getMessage());
+                                            }
+                                        }));
                                 return;
                             }
-                            sender.sendMessage(getRichMessage("resolve-success-repo-reset", true, new HashMap<String, String>() {{
-                                put("label", label);
-                            }}));
+                            sender.sendMessage(
+                                    getRichMessage("resolve-success-repo-reset", true, new HashMap<String, String>() {
+                                        {
+                                            put("label", label);
+                                        }
+                                    }));
                             break;
                         }
                         case "reset-local-changes": {
@@ -728,26 +851,33 @@ public class BaseCommand implements CommandExecutor {
                                 sender.sendMessage(getRichMessage("resolve-success-reset-local-changes", true));
                             } catch (Exception e) {
                                 MineCICD.logError(e);
-                                sender.sendMessage(getRichMessage("resolve-failed-reset-local-changes", true, new HashMap<String, String>() {{
-                                    put("error", e.getMessage());
-                                }}));
+                                sender.sendMessage(getRichMessage("resolve-failed-reset-local-changes", true,
+                                        new HashMap<String, String>() {
+                                            {
+                                                put("error", e.getMessage());
+                                            }
+                                        }));
                                 return;
                             }
                             break;
                         }
                         default: {
-                            sender.sendMessage(getRichMessage("resolve-usage", true, new HashMap<String, String>() {{
-                                put("label", label);
-                            }}));
+                            sender.sendMessage(getRichMessage("resolve-usage", true, new HashMap<String, String>() {
+                                {
+                                    put("label", label);
+                                }
+                            }));
                             break;
                         }
                     }
                     break;
                 }
                 default: {
-                    sender.sendMessage(getRichMessage("invalid-subcommand", true, new HashMap<String, String>() {{
-                        put("label", label);
-                    }}));
+                    sender.sendMessage(getRichMessage("invalid-subcommand", true, new HashMap<String, String>() {
+                        {
+                            put("label", label);
+                        }
+                    }));
                     break;
                 }
             }

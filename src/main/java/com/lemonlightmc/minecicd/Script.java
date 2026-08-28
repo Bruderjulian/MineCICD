@@ -20,81 +20,85 @@ import java.util.logging.Level;
 
 public abstract class Script {
     public static void loadDefaultScript() {
-        File scriptsDir = new File(plugin.getDataFolder(), "scripts");
-        File exampleScriptFile = new File(scriptsDir, "example_script.sh");
-        if (exampleScriptFile.exists()) return;
+        final File scriptsDir = new File(plugin.getDataFolder(), "scripts");
+        final File exampleScriptFile = new File(scriptsDir, "example_script.sh");
+        if (exampleScriptFile.exists())
+            return;
         exampleScriptFile.getParentFile().mkdirs();
 
-        InputStreamReader reader = new InputStreamReader(Objects.requireNonNull(MineCICD.plugin.getResource("example_script.sh")), StandardCharsets.UTF_8);
+        final InputStreamReader reader = new InputStreamReader(
+                Objects.requireNonNull(MineCICD.plugin.getResource("example_script.sh")), StandardCharsets.UTF_8);
 
-        Scanner scanner = new Scanner(reader);
+        final Scanner scanner = new Scanner(reader);
         try {
             Files.write(exampleScriptFile.toPath(), scanner.useDelimiter("\\A").next().getBytes());
-        } catch (IOException e) {
+        } catch (final IOException e) {
             MineCICD.log("Failed to write example_script.txt", Level.SEVERE);
             MineCICD.logError(e);
         }
     }
 
-    public static void run(String script) throws Exception {
-        boolean ownsBusy = !MineCICD.busyLock;
+    public static void run(final String script) throws Exception {
+        final boolean ownsBusy = !MineCICD.busyLock;
         MineCICD.busyLock = true;
 
-        String bar = MineCICD.addBar(Messages.getCleanMessage("bossbar-script", true), BarColor.BLUE, BarStyle.SOLID);
+        final String bar = MineCICD.addBar(Messages.getCleanMessage("bossbar-script", true), BarColor.BLUE, BarStyle.SOLID);
         try {
-            File scriptsFolder = new File(plugin.getDataFolder(), "scripts");
-            File scriptFile = new File(scriptsFolder, script + ".sh");
+            final File scriptsFolder = new File(plugin.getDataFolder(), "scripts");
+            final File scriptFile = new File(scriptsFolder, script + ".sh");
 
-            List<String> lines = Files.readAllLines(scriptFile.toPath().toAbsolutePath());
+            final List<String> lines = Files.readAllLines(scriptFile.toPath().toAbsolutePath());
 
-            final int[] result = {-1};
-            final String[] output = {""};
+            final int[] result = { -1 };
+            final String[] output = { "" };
             Bukkit.getScheduler().runTask(plugin, () -> {
                 try {
                     for (int i = 0; i < lines.size(); i++) {
-                        String line = lines.get(i);
+                        final String line = lines.get(i);
                         if (line.startsWith("#")) {
                             continue;
                         }
 
                         if (line.startsWith("! ")) {
                             try {
-                                ProcessBuilder b = new ProcessBuilder(line.substring(3).split(" "));
+                                final ProcessBuilder b = new ProcessBuilder(line.substring(3).split(" "));
                                 b.inheritIO();
-                                Process p = b.start();
+                                final Process p = b.start();
                                 result[0] = p.waitFor();
-                            } catch (Exception e) {
-                                int finalI = i;
+                            } catch (final Exception e) {
+                                final int finalI = i;
                                 output[0] = getMessage(
                                         "script-error-console",
                                         true,
-                                        new HashMap<String, String>() {{
-                                            put("script", script);
-                                            put("line", String.valueOf(finalI + 1));
-                                            put("command", line);
-                                            put("error", e.getMessage());
-                                        }}
-                                );
-                                result[0] = 1;
-                                break;
-                            }
-                        } else {
-                            int finalI = i;
-                            Bukkit.getScheduler().runTask(plugin, () -> {
-                                try {
-                                    Bukkit.dispatchCommand(Bukkit.getConsoleSender(), line);
-                                    result[0] = 0;
-                                } catch (Exception e) {
-                                    output[0] = getMessage(
-                                            "script-error-console",
-                                            true,
-                                            new HashMap<String, String>() {{
+                                        new HashMap<String, String>() {
+                                            {
                                                 put("script", script);
                                                 put("line", String.valueOf(finalI + 1));
                                                 put("command", line);
                                                 put("error", e.getMessage());
-                                            }}
-                                    );
+                                            }
+                                        });
+                                result[0] = 1;
+                                break;
+                            }
+                        } else {
+                            final int finalI = i;
+                            Bukkit.getScheduler().runTask(plugin, () -> {
+                                try {
+                                    Bukkit.dispatchCommand(Bukkit.getConsoleSender(), line);
+                                    result[0] = 0;
+                                } catch (final Exception e) {
+                                    output[0] = getMessage(
+                                            "script-error-console",
+                                            true,
+                                            new HashMap<String, String>() {
+                                                {
+                                                    put("script", script);
+                                                    put("line", String.valueOf(finalI + 1));
+                                                    put("command", line);
+                                                    put("error", e.getMessage());
+                                                }
+                                            });
                                     result[0] = 1;
                                 }
                             }).getOwner();
@@ -104,21 +108,22 @@ public abstract class Script {
                         }
 
                         if (result[0] != 0) {
-                            int finalI = i;
+                            final int finalI = i;
                             output[0] = getMessage(
                                     "script-error-console",
                                     true,
-                                    new HashMap<String, String>() {{
-                                        put("script", script);
-                                        put("line", String.valueOf(finalI + 1));
-                                        put("command", line);
-                                        put("error", "Exited with exit code " + result[0]);
-                                    }}
-                            );
+                                    new HashMap<String, String>() {
+                                        {
+                                            put("script", script);
+                                            put("line", String.valueOf(finalI + 1));
+                                            put("command", line);
+                                            put("error", "Exited with exit code " + result[0]);
+                                        }
+                                    });
                             break;
                         }
                     }
-                } catch (Exception e) {
+                } catch (final Exception e) {
                     MineCICD.logError(e);
                 }
             });
@@ -131,10 +136,12 @@ public abstract class Script {
                 throw new Exception(output[0]);
             }
 
-            MineCICD.changeBar(bar, Messages.getCleanMessage("bossbar-script-success", true), BarColor.GREEN, BarStyle.SOLID);
+            MineCICD.changeBar(bar, Messages.getCleanMessage("bossbar-script-success", true), BarColor.GREEN,
+                    BarStyle.SOLID);
             MineCICD.removeBar(bar, Config.getInt("bossbar.duration"));
-        } catch (Exception e) {
-            MineCICD.changeBar(bar, Messages.getCleanMessage("bossbar-script-failed", true), BarColor.RED, BarStyle.SEGMENTED_12);
+        } catch (final Exception e) {
+            MineCICD.changeBar(bar, Messages.getCleanMessage("bossbar-script-failed", true), BarColor.RED,
+                    BarStyle.SEGMENTED_12);
             MineCICD.removeBar(bar, Config.getInt("bossbar.duration"));
             throw e;
         } finally {

@@ -42,16 +42,17 @@ public final class MineCICD extends JavaPlugin {
         config = getConfig();
 
         if (config.get("repository-url") != null) {
-            File configFile = new File(getDataFolder(), "config.yml");
+            final File configFile = new File(getDataFolder(), "config.yml");
             configFile.renameTo(new File(getDataFolder(), "config_old.yml"));
 
-            File messagesFile = new File(getDataFolder(), "messages.yml");
+            final File messagesFile = new File(getDataFolder(), "messages.yml");
             messagesFile.renameTo(new File(getDataFolder(), "messages_old.yml"));
 
-            // delete all files in the data folder except for the old config and messages files
-            File[] files = getDataFolder().listFiles();
+            // delete all files in the data folder except for the old config and messages
+            // files
+            final File[] files = getDataFolder().listFiles();
             if (files != null) {
-                for (File file : files) {
+                for (final File file : files) {
                     if (!file.getName().equals("config_old.yml") && !file.getName().equals("messages_old.yml")) {
                         FileUtils.deleteQuietly(file);
                     }
@@ -61,7 +62,7 @@ public final class MineCICD extends JavaPlugin {
             try {
                 reload();
                 Migration.migrate();
-            } catch (Exception e) {
+            } catch (final Exception e) {
                 throw new RuntimeException(e);
             }
         } else {
@@ -82,13 +83,13 @@ public final class MineCICD extends JavaPlugin {
         Objects.requireNonNull(this.getCommand("minecicd")).setTabCompleter(new BaseCommandTabCompleter());
 
         try (Git ignored = Git.open(new File("."))) {
-        } catch (Exception ignored) {
+        } catch (final Exception ignored) {
         }
     }
 
     public static void setupWebHook() {
-        int port = config.getInt("webhooks.port");
-        String path = config.getString("webhooks.path");
+        final int port = config.getInt("webhooks.port");
+        final String path = config.getString("webhooks.path");
         if (port != 0) {
             try {
                 if (webServer != null) {
@@ -98,10 +99,10 @@ public final class MineCICD extends JavaPlugin {
 
                 String serverIp;
                 try {
-                    URL whatismyip = new URL("https://checkip.amazonaws.com");
-                    BufferedReader in = new BufferedReader(new InputStreamReader(whatismyip.openStream()));
+                    final URL whatismyip = new URL("https://checkip.amazonaws.com");
+                    final BufferedReader in = new BufferedReader(new InputStreamReader(whatismyip.openStream()));
                     serverIp = in.readLine();
-                } catch (IOException e) {
+                } catch (final IOException e) {
                     throw new RuntimeException(e);
                 }
 
@@ -111,7 +112,7 @@ public final class MineCICD extends JavaPlugin {
                 webServer.start();
 
                 log("MineCICD is now listening on: \"http://" + serverIp + ":" + port + "/" + path + "\"", Level.INFO);
-            } catch (IOException e) {
+            } catch (final IOException e) {
                 logError(e);
             }
         } else {
@@ -122,10 +123,11 @@ public final class MineCICD extends JavaPlugin {
         }
     }
 
-    public static void reload() throws GitAPIException, IOException, InvalidConfigurationException, InterruptedException {
+    public static void reload()
+            throws GitAPIException, IOException, InvalidConfigurationException, InterruptedException {
         plugin.saveDefaultConfig();
 
-        for (String type : busyBars.keySet()) {
+        for (final String type : busyBars.keySet()) {
             removeBar(type, 0);
         }
 
@@ -140,7 +142,7 @@ public final class MineCICD extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        for (String type : busyBars.keySet()) {
+        for (final String type : busyBars.keySet()) {
             removeBar(type, 0);
         }
 
@@ -150,51 +152,56 @@ public final class MineCICD extends JavaPlugin {
         }
     }
 
-    public static void log(String l, Level level) {
+    public static void log(final String l, final Level level) {
         logger.log(level, l);
     }
 
-    public static void logError(Exception e) {
+    public static void logError(final Exception e) {
         logger.log(Level.SEVERE, e.getMessage(), e);
-        StringBuilder stackTrace = new StringBuilder();
-        for (StackTraceElement element : e.getStackTrace()) {
+        final StringBuilder stackTrace = new StringBuilder();
+        for (final StackTraceElement element : e.getStackTrace()) {
             stackTrace.append(element.toString()).append("\n");
         }
         logger.log(Level.SEVERE, stackTrace.toString());
     }
 
-    public static String addBar(String title, BarColor color, BarStyle style) {
-        if (!Config.getBoolean("bossbar.enabled")) return "";
-        String random = String.valueOf(System.currentTimeMillis());
+    public static String addBar(final String title, final BarColor color, final BarStyle style) {
+        if (!Config.getBoolean("bossbar.enabled"))
+            return "";
+        final String random = String.valueOf(System.currentTimeMillis());
 
         MineCICD.busyBars.put(random, Bukkit.createBossBar(title, color, style));
 
-        ArrayList<Player> players = new ArrayList<>(Bukkit.getOnlinePlayers());
+        final ArrayList<Player> players = new ArrayList<>(Bukkit.getOnlinePlayers());
         players.removeIf(player -> !player.hasPermission("minecicd.notify"));
 
-        for (Player player : players) {
+        for (final Player player : players) {
             MineCICD.busyBars.get(random).addPlayer(player);
         }
 
         return random;
     }
 
-    public static void changeBar(String type, String title, BarColor color, BarStyle style) {
-        if (!Config.getBoolean("bossbar.enabled")) return;
-        if (!MineCICD.busyBars.containsKey(type)) return;
+    public static void changeBar(final String type, final String title, final BarColor color, final BarStyle style) {
+        if (!Config.getBoolean("bossbar.enabled"))
+            return;
+        if (!MineCICD.busyBars.containsKey(type))
+            return;
 
         MineCICD.busyBars.get(type).setTitle(title);
         MineCICD.busyBars.get(type).setColor(color);
         MineCICD.busyBars.get(type).setStyle(style);
     }
 
-    public static void removeBar(String type, int delay) {
-        if (!Config.getBoolean("bossbar.enabled")) return;
-        if (!MineCICD.busyBars.containsKey(type)) return;
+    public static void removeBar(final String type, final int delay) {
+        if (!Config.getBoolean("bossbar.enabled"))
+            return;
+        if (!MineCICD.busyBars.containsKey(type))
+            return;
 
         if (delay > 0) {
-            BossBar bar = MineCICD.busyBars.get(type);
-            BukkitTask task = Bukkit.getScheduler().runTaskTimer(MineCICD.plugin, () -> {
+            final BossBar bar = MineCICD.busyBars.get(type);
+            final BukkitTask task = Bukkit.getScheduler().runTaskTimer(MineCICD.plugin, () -> {
                 double currentProgress = bar.getProgress();
                 currentProgress -= (1.0 / (double) delay);
                 if (currentProgress < 0) {

@@ -17,31 +17,35 @@ import java.util.*;
  * Functionality documentation:
  * <p>
  * - Uses Git native filters, clean and smudge<br>
- * - .gitattributes file is used to specify the filter associated with each file<br>
- * - .git/config file is used to specify the individual "minecicd-replace.exe ..." commands for each filter<br>
+ * - .gitattributes file is used to specify the filter associated with each
+ * file<br>
+ * - .git/config file is used to specify the individual "minecicd-replace.exe
+ * ..." commands for each filter<br>
  * - secrets cannot contain the single quote character (" ' ")<br>
- * - each file can only have one filter, but each sed command may replace multiple placeholders<br>
- * - the name of the filter in the .git/config and .gitattributes files will be the same as the relative file path that it is applied to<br>
+ * - each file can only have one filter, but each sed command may replace
+ * multiple placeholders<br>
+ * - the name of the filter in the .git/config and .gitattributes files will be
+ * the same as the relative file path that it is applied to<br>
  * <p>
  * Each secret has the following:
- * - A unique identifier, which is the same as its {{identifier}} placeholder will be<br>
+ * - A unique identifier, which is the same as its {{identifier}} placeholder
+ * will be<br>
  * - A file that it is associated with<br>
  * - A secret that it will replace in the file
  */
 public class GitSecret {
-    public static HashMap<String, ArrayList<GitSecret>> readFromSecretsStore() throws IOException, InvalidConfigurationException {
+    public static HashMap<String, ArrayList<GitSecret>> readFromSecretsStore()
+            throws IOException, InvalidConfigurationException {
         File secretsFile = new File(".", "secrets.yml");
         HashMap<String, ArrayList<GitSecret>> secrets = new HashMap<>();
         if (!secretsFile.exists()) {
-            Files.write(secretsFile.toPath(), (
-                    "1:\n" +
-                            "  file: \"plugins/example-plugin-1/config.yml\"\n" +
-                            "  database_password: \"password\"\n" +
-                            "  database_username: \"username\"\n" +
-                            "2:\n" +
-                            "  file: \"plugins/example-plugin-2/config.yml\"\n" +
-                            "  license_key: \"license_key\""
-            ).getBytes());
+            Files.write(secretsFile.toPath(), ("1:\n" +
+                    "  file: \"plugins/example-plugin-1/config.yml\"\n" +
+                    "  database_password: \"password\"\n" +
+                    "  database_username: \"username\"\n" +
+                    "2:\n" +
+                    "  file: \"plugins/example-plugin-2/config.yml\"\n" +
+                    "  license_key: \"license_key\"").getBytes());
         }
 
         FileConfiguration secretsConfig = new YamlConfiguration();
@@ -77,7 +81,8 @@ public class GitSecret {
                     throw new InvalidConfigurationException("Every secret must have a value");
                 }
                 if (secretIdentifier.contains("'") || secret.contains("'")) {
-                    throw new InvalidConfigurationException("Secrets and their identifier cannot contain the single quote character");
+                    throw new InvalidConfigurationException(
+                            "Secrets and their identifier cannot contain the single quote character");
                 }
                 if (secretsForThisFile.contains(secretIdentifier)) {
                     throw new InvalidConfigurationException("Secrets must have unique identifiers");
@@ -92,7 +97,8 @@ public class GitSecret {
         return secrets;
     }
 
-    public static void configureGitSecretFiltering(HashMap<String, ArrayList<GitSecret>> secrets) throws IOException, InterruptedException {
+    public static void configureGitSecretFiltering(HashMap<String, ArrayList<GitSecret>> secrets)
+            throws IOException, InterruptedException {
         File gitConfigFile = new File(new File(".", ".git"), "config");
         if (!GitUtils.activeRepoExists()) {
             return;
@@ -161,15 +167,18 @@ public class GitSecret {
             if (!sedInstalled) {
                 for (GitSecret secret : secrets.get(filePath)) {
                     String base64Secret = Base64.getEncoder().encodeToString(secret.secret.getBytes());
-                    String base64Identifier = Base64.getEncoder().encodeToString(("{{" + secret.identifier + "}}").getBytes());
+                    String base64Identifier = Base64.getEncoder()
+                            .encodeToString(("{{" + secret.identifier + "}}").getBytes());
 
                     cleanCommand.append(" ").append(base64Secret).append(" ").append(base64Identifier);
                     smudgeCommand.append(" ").append(base64Identifier).append(" ").append(base64Secret);
                 }
             } else {
                 for (GitSecret secret : secrets.get(filePath)) {
-                    cleanCommand.append(" -e 's/").append(secret.secret).append("/{{").append(secret.identifier).append("}}/g'");
-                    smudgeCommand.append(" -e 's/{{").append(secret.identifier).append("}}/").append(secret.secret).append("/g'");
+                    cleanCommand.append(" -e 's/").append(secret.secret).append("/{{").append(secret.identifier)
+                            .append("}}/g'");
+                    smudgeCommand.append(" -e 's/{{").append(secret.identifier).append("}}/").append(secret.secret)
+                            .append("/g'");
                 }
             }
 
@@ -192,12 +201,14 @@ public class GitSecret {
             toolsDir.mkdirs();
         }
 
-        File replaceExecutable = new File(toolsDir, SystemUtils.IS_OS_WINDOWS ? "windows-replace.exe" : "linux-replace.exe");
+        File replaceExecutable = new File(toolsDir,
+                SystemUtils.IS_OS_WINDOWS ? "windows-replace.exe" : "linux-replace.exe");
         if (replaceExecutable.exists()) {
             return;
         }
 
-        InputStream is = MineCICD.plugin.getResource((SystemUtils.IS_OS_WINDOWS ? "windows-replace.exe" : "linux-replace.exe"));
+        InputStream is = MineCICD.plugin
+                .getResource((SystemUtils.IS_OS_WINDOWS ? "windows-replace.exe" : "linux-replace.exe"));
         if (is == null) {
             throw new IOException("Could not load the MineCICD replace executable");
         }

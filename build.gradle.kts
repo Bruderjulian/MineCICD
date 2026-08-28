@@ -19,12 +19,12 @@ dependencies {
 }
 
 group = "com.lemonlightmc"
-version = "2.2.1"
+version = "2.3.0"
 description = "A CI/CD plugin for Minecraft Servers and Networks"
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_1_8
-    targetCompatibility = JavaVersion.VERSION_1_8
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
     withSourcesJar()
 }
 

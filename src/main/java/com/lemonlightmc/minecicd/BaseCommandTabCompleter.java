@@ -1,4 +1,4 @@
-package ml.konstanius.minecicd;
+package com.lemonlightmc.minecicd;
 
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;

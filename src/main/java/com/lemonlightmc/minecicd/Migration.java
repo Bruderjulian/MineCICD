@@ -1,4 +1,4 @@
-package ml.konstanius.minecicd;
+package com.lemonlightmc.minecicd;
 
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;

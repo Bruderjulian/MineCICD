@@ -1,4 +1,4 @@
-package ml.konstanius.minecicd;
+package com.lemonlightmc.minecicd;
 
 import org.bukkit.Bukkit;
 import org.bukkit.boss.BarColor;
@@ -12,6 +12,10 @@ import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.lib.PersonIdent;
 import org.eclipse.jgit.revwalk.RevCommit;
 
+import static com.lemonlightmc.minecicd.Messages.*;
+import static com.lemonlightmc.minecicd.MineCICD.busyLock;
+import static com.lemonlightmc.minecicd.MineCICD.plugin;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -19,10 +23,6 @@ import java.io.InputStreamReader;
 import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.util.*;
-
-import static ml.konstanius.minecicd.Messages.*;
-import static ml.konstanius.minecicd.MineCICD.busyLock;
-import static ml.konstanius.minecicd.MineCICD.plugin;
 
 public class BaseCommand implements CommandExecutor {
     @Override

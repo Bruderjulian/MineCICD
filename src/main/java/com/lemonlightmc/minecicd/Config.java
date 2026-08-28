@@ -1,4 +1,4 @@
-package ml.konstanius.minecicd;
+package com.lemonlightmc.minecicd;
 
 public abstract class Config {
     public static String getString(String path) {

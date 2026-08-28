@@ -1,4 +1,4 @@
-package ml.konstanius.minecicd;
+package com.lemonlightmc.minecicd;
 
 import com.sun.net.httpserver.HttpServer;
 import org.apache.commons.io.FileUtils;

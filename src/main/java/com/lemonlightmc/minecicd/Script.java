@@ -1,8 +1,11 @@
-package ml.konstanius.minecicd;
+package com.lemonlightmc.minecicd;
 
 import org.bukkit.Bukkit;
 import org.bukkit.boss.BarColor;
 import org.bukkit.boss.BarStyle;
+
+import static com.lemonlightmc.minecicd.Messages.getMessage;
+import static com.lemonlightmc.minecicd.MineCICD.plugin;
 
 import java.io.File;
 import java.io.IOException;
@@ -14,9 +17,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Scanner;
 import java.util.logging.Level;
-
-import static ml.konstanius.minecicd.Messages.getMessage;
-import static ml.konstanius.minecicd.MineCICD.plugin;
 
 public abstract class Script {
     public static void loadDefaultScript() {

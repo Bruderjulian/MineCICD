@@ -1,4 +1,4 @@
-package ml.konstanius.minecicd;
+package com.lemonlightmc.minecicd;
 
 import org.apache.commons.io.FileUtils;
 import org.bukkit.boss.BarColor;
@@ -26,6 +26,9 @@ import org.eclipse.jgit.treewalk.AbstractTreeIterator;
 import org.eclipse.jgit.treewalk.CanonicalTreeParser;
 import org.eclipse.jgit.treewalk.TreeWalk;
 
+import static com.lemonlightmc.minecicd.Messages.getCleanMessage;
+import static com.lemonlightmc.minecicd.MineCICD.busyLock;
+
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
@@ -35,9 +38,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.*;
 import java.util.logging.Level;
-
-import static ml.konstanius.minecicd.Messages.getCleanMessage;
-import static ml.konstanius.minecicd.MineCICD.busyLock;
 
 public abstract class GitUtils {
     public static CredentialsProvider getCredentials() {

@@ -1,6 +1,6 @@
 name: MineCICD
 version: '2.2.1'
-main: ml.konstanius.minecicd.MineCICD
+main: com.lemonlightmc.minecicd.MineCICD
 api-version: '1.13'
 prefix: MineCICD
 load: STARTUP

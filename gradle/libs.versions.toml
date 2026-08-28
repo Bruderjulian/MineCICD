@@ -1,0 +1,14 @@
+[versions]
+shadow = "9.6.1"
+paper-api = "1.13-R0.1-SNAPSHOT"
+jgit = "5.13.3.202401111512-r"
+commons-io = "2.16.1"
+json = "20240303"
+commons-lang3 = "3.14.0"
+
+[libraries]
+paper-api = { module = "com.destroystokyo.paper:paper-api", version.ref = "paper-api" }
+eclipse-jgit = { module = "org.eclipse.jgit:org.eclipse.jgit", version.ref = "jgit" }
+commons-io = { module = "commons-io:commons-io", version.ref = "commons-io" }
+json = { module = "org.json:json", version.ref = "json" }
+commons-lang3 = { module = "org.apache.commons:commons-lang3", version.ref = "commons-lang3" }

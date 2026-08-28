@@ -1,0 +1,75 @@
+name: Build
+
+on:
+  push:
+    branches: ["master", "main"]
+  pull_request:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (JDK ${{ matrix.java }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        java: [17, 21]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build with Gradle
+        run: ./gradlew build --no-daemon
+
+      - name: Upload build artifacts
+        if: matrix.java == '21'
+        uses: actions/upload-artifact@v4
+        with:
+          name: MineCICD-${{ github.sha }}
+          path: build/libs/*.jar
+
+  release:
+    name: Upload to release
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build with Gradle
+        run: ./gradlew shadowJar --no-daemon
+
+      - name: Read project version
+        id: version
+        run: echo "value=$(./gradlew -q printVersion --no-daemon)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: build/libs/MineCICD-${{ steps.version.outputs.value }}.jar
+          asset_name: MineCICD.jar
+          asset_content_type: application/java-archive

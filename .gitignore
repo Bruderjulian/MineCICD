@@ -1,1 +1,33 @@
-/target/
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Maven (legacy)
+target/
+dependency-reduced-pom.xml
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# Eclipse
+.classpath
+.project
+.settings/
+bin/
+
+# Java
+*.class
+*.jar
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log

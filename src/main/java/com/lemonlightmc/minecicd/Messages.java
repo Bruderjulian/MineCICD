@@ -198,11 +198,12 @@ public abstract class Messages {
             messages.clear();
             final YamlConfiguration pluginMessagesResource = new YamlConfiguration();
             pluginMessagesResource.load(new InputStreamReader(
-                    Objects.requireNonNull(MineCICD.plugin.getResource("messages.yml")), StandardCharsets.UTF_8));
+                    Objects.requireNonNull(MineCICD.instance().getResource("messages.yml")), StandardCharsets.UTF_8));
 
-            final File pluginMessagesFile = new File(MineCICD.plugin.getDataFolder().getAbsolutePath(), "messages.yml");
+            final File pluginMessagesFile = new File(MineCICD.instance().getDataFolder().getAbsolutePath(),
+                    "messages.yml");
             if (!pluginMessagesFile.exists()) {
-                MineCICD.plugin.saveResource("messages.yml", false);
+                MineCICD.instance().saveResource("messages.yml", false);
             }
 
             final FileConfiguration messagesConfig = new YamlConfiguration();
@@ -223,20 +224,20 @@ public abstract class Messages {
                     }
                     messages.put(key, builder.toString());
                 } else {
-                    MineCICD.log("Invalid message format at key: " + key, Level.WARNING);
+                    MineCICD.logger().log(Level.WARNING, "Invalid message format at key: " + key);
                 }
             }
 
             // check if any keys are missing
             for (final String key : pluginMessagesResource.getKeys(false)) {
                 if (!messages.containsKey(key)) {
-                    MineCICD.log("Missing message key: " + key, Level.WARNING);
+                    MineCICD.logger().log(Level.WARNING, "Missing message key: " + key);
                     messages.put(key, pluginMessagesResource.getString(key));
                 }
             }
         } catch (IOException | InvalidConfigurationException e) {
-            MineCICD.log("Failed to load messages", Level.SEVERE);
-            MineCICD.logError(e);
+            MineCICD.logger().log(Level.SEVERE, "Failed to load messages");
+            MineCICD.instance().logError(e);
         }
     }
 

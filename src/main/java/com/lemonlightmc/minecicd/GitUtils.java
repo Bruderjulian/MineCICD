@@ -27,7 +27,6 @@ import org.eclipse.jgit.treewalk.CanonicalTreeParser;
 import org.eclipse.jgit.treewalk.TreeWalk;
 
 import static com.lemonlightmc.minecicd.Messages.getCleanMessage;
-import static com.lemonlightmc.minecicd.MineCICD.busyLock;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -59,14 +58,14 @@ public abstract class GitUtils {
             return;
 
         final InputStreamReader reader = new InputStreamReader(
-                Objects.requireNonNull(MineCICD.plugin.getResource(".gitignore")), StandardCharsets.UTF_8);
+                Objects.requireNonNull(MineCICD.instance().getResource(".gitignore")), StandardCharsets.UTF_8);
 
         final Scanner scanner = new Scanner(reader);
         try {
             Files.write(gitIgnoreFile.toPath(), scanner.useDelimiter("\\A").next().getBytes());
         } catch (final IOException e) {
-            MineCICD.log("Failed to write .gitignore", Level.SEVERE);
-            MineCICD.logError(e);
+            MineCICD.logger().log(Level.SEVERE, "Failed to write .gitignore");
+            MineCICD.instance().logError(e);
         }
     }
 
@@ -215,8 +214,8 @@ public abstract class GitUtils {
         } catch (final NoHeadException ignored) {
             return "";
         } catch (final Exception e) {
-            MineCICD.log("Failed to get current revision", Level.SEVERE);
-            MineCICD.logError(e);
+            MineCICD.logger().log(Level.SEVERE, "Failed to get current revision");
+            MineCICD.instance().logError(e);
             return "";
         }
     }
@@ -231,8 +230,8 @@ public abstract class GitUtils {
             return git.log().setMaxCount(1).add(git.getRepository().resolve("origin/" + Config.getString("git.branch")))
                     .call().iterator().next().getName();
         } catch (final Exception e) {
-            MineCICD.log("Failed to get latest remote revision", Level.SEVERE);
-            MineCICD.logError(e);
+            MineCICD.logger().log(Level.SEVERE, "Failed to get latest remote revision");
+            MineCICD.instance().logError(e);
             return "";
         }
     }
@@ -246,16 +245,16 @@ public abstract class GitUtils {
             git.add().addFilepattern(".").call();
             return git.status().call().getUncommittedChanges();
         } catch (final Exception e) {
-            MineCICD.log("Failed to check for changes", Level.SEVERE);
-            MineCICD.logError(e);
+            MineCICD.logger().log(Level.SEVERE, "Failed to check for changes");
+            MineCICD.instance().logError(e);
             throw new IllegalStateException("Failed to check for changes");
         }
     }
 
     public static List<DiffEntry> getRemoteChanges(final Git git) throws GitAPIException, IOException {
-        final boolean ownsBusy = !busyLock;
+        final boolean ownsBusy = !MineCICD.instance().busyLock;
         if (ownsBusy)
-            busyLock = true;
+            MineCICD.instance().busyLock = true;
         try {
             git.fetch().setCredentialsProvider(getCredentials()).call();
 
@@ -264,7 +263,7 @@ public abstract class GitUtils {
             return getChangesBetween(git, oldRevId, newRevId);
         } finally {
             if (ownsBusy)
-                busyLock = false;
+                MineCICD.instance().busyLock = false;
         }
     }
 
@@ -282,11 +281,12 @@ public abstract class GitUtils {
 
     public static boolean pull() throws GitAPIException, URISyntaxException, IOException, InvalidConfigurationException,
             InterruptedException {
-        final boolean ownsBusy = !busyLock;
+        final boolean ownsBusy = !MineCICD.instance().busyLock;
         if (ownsBusy)
-            busyLock = true;
+            MineCICD.instance().busyLock = true;
 
-        final String bar = MineCICD.addBar(getCleanMessage("bossbar-pulling", true), BarColor.BLUE, BarStyle.SOLID);
+        final String bar = MineCICD.instance().addBar(getCleanMessage("bossbar-pulling", true), BarColor.BLUE,
+                BarStyle.SOLID);
 
         try {
             final String repo = Config.getString("git.repo");
@@ -351,22 +351,24 @@ public abstract class GitUtils {
                                             final String command = "plugman unload " + pluginStripped;
                                             try {
                                                 final String finalPluginStripped = pluginStripped;
-                                                MineCICD.plugin.getServer().getScheduler()
-                                                        .callSyncMethod(MineCICD.plugin, () -> {
+                                                MineCICD.instance().getServer().getScheduler()
+                                                        .callSyncMethod(MineCICD.instance(), () -> {
                                                             try {
-                                                                MineCICD.plugin.getServer().dispatchCommand(
-                                                                        MineCICD.plugin.getServer().getConsoleSender(),
+                                                                MineCICD.instance().getServer().dispatchCommand(
+                                                                        MineCICD.instance().getServer()
+                                                                                .getConsoleSender(),
                                                                         command);
                                                             } catch (final Exception e) {
-                                                                MineCICD.log("Failed to unload plugin "
-                                                                        + finalPluginStripped, Level.SEVERE);
-                                                                MineCICD.logError(e);
+                                                                MineCICD.logger().log(Level.SEVERE,
+                                                                        "Failed to unload plugin "
+                                                                                + finalPluginStripped);
+                                                                MineCICD.instance().logError(e);
                                                             }
                                                             return null;
                                                         }).get();
                                             } catch (final Exception e) {
-                                                MineCICD.log("Failed to unload plugin " + pluginStripped, Level.SEVERE);
-                                                MineCICD.logError(e);
+MineCICD.logger().log(Level.SEVERE, "Failed to unload plugin " + pluginStripped);
+                                                MineCICD.instance().logError(e);
                                             }
                                         }
                                     }
@@ -402,23 +404,23 @@ public abstract class GitUtils {
                                             final String command = "plugman load " + pluginStripped;
                                             try {
                                                 final String finalPluginStripped = pluginStripped;
-                                                MineCICD.plugin.getServer().getScheduler()
-                                                        .callSyncMethod(MineCICD.plugin, () -> {
+                                                MineCICD.instance().getServer().getScheduler()
+                                                        .callSyncMethod(MineCICD.instance(), () -> {
                                                             try {
-                                                                MineCICD.plugin.getServer().dispatchCommand(
-                                                                        MineCICD.plugin.getServer().getConsoleSender(),
+                                                                MineCICD.instance().getServer().dispatchCommand(
+                                                                        MineCICD.instance().getServer()
+                                                                                .getConsoleSender(),
                                                                         command);
                                                             } catch (final Exception e) {
-                                                                MineCICD.log(
-                                                                        "Failed to load plugin " + finalPluginStripped,
-                                                                        Level.SEVERE);
-                                                                MineCICD.logError(e);
+                                                                MineCICD.logger().log(Level.SEVERE,
+                                                                        "Failed to load plugin " + finalPluginStripped);
+                                                                MineCICD.instance().logError(e);
                                                             }
                                                             return null;
                                                         }).get();
                                             } catch (final Exception e) {
-                                                MineCICD.log("Failed to load plugin " + pluginStripped, Level.SEVERE);
-                                                MineCICD.logError(e);
+MineCICD.logger().log(Level.SEVERE, "Failed to load plugin " + pluginStripped);
+                                                MineCICD.instance().logError(e);
                                             }
                                         }
                                     }
@@ -484,22 +486,24 @@ public abstract class GitUtils {
                                     final String command = "plugman unload " + pluginStripped;
                                     try {
                                         final String finalPluginStripped = pluginStripped;
-                                        MineCICD.plugin.getServer().getScheduler()
-                                                .callSyncMethod(MineCICD.plugin, () -> {
+                                        MineCICD.instance().getServer().getScheduler()
+                                                .callSyncMethod(MineCICD.instance(), () -> {
                                                     try {
-                                                        MineCICD.plugin.getServer().dispatchCommand(
-                                                                MineCICD.plugin.getServer().getConsoleSender(),
-                                                                command);
+MineCICD.instance().getServer().dispatchCommand(
+                                                                        MineCICD.instance().getServer()
+                                                                                .getConsoleSender(),
+                                                                        command);
                                                     } catch (final Exception e) {
-                                                        MineCICD.log("Failed to unload plugin " + finalPluginStripped,
-                                                                Level.SEVERE);
-                                                        MineCICD.logError(e);
+                                                        MineCICD.logger().log(Level.SEVERE,
+                                                                "Failed to unload plugin " + finalPluginStripped);
+                                                        MineCICD.instance().logError(e);
                                                     }
                                                     return null;
                                                 }).get();
                                     } catch (final Exception e) {
-                                        MineCICD.log("Failed to unload plugin " + pluginStripped, Level.SEVERE);
-                                        MineCICD.logError(e);
+                                        MineCICD.logger().log(Level.SEVERE,
+                                                "Failed to unload plugin " + pluginStripped);
+                                        MineCICD.instance().logError(e);
                                     }
                                 }
                             }
@@ -533,19 +537,23 @@ public abstract class GitUtils {
                                 final String command = "plugman load " + pluginStripped;
                                 try {
                                     final String finalPluginStripped = pluginStripped;
-                                    MineCICD.plugin.getServer().getScheduler().callSyncMethod(MineCICD.plugin, () -> {
-                                        try {
-                                            MineCICD.plugin.getServer().dispatchCommand(
-                                                    MineCICD.plugin.getServer().getConsoleSender(), command);
-                                        } catch (final Exception e) {
-                                            MineCICD.log("Failed to load plugin " + finalPluginStripped, Level.SEVERE);
-                                            MineCICD.logError(e);
-                                        }
-                                        return null;
-                                    }).get();
+                                    MineCICD.instance().getServer().getScheduler()
+                                            .callSyncMethod(MineCICD.instance(), () -> {
+                                                try {
+                                                    MineCICD.instance().getServer().dispatchCommand(
+                                                            MineCICD.instance().getServer()
+                                                                    .getConsoleSender(),
+                                                            command);
+                                                } catch (final Exception e) {
+                                                    MineCICD.logger().log(Level.SEVERE,
+                                                            "Failed to load plugin " + finalPluginStripped);
+                                                    MineCICD.instance().logError(e);
+                                                }
+                                                return null;
+                                            }).get();
                                 } catch (final Exception e) {
-                                    MineCICD.log("Failed to load plugin " + pluginStripped, Level.SEVERE);
-                                    MineCICD.logError(e);
+                                    MineCICD.logger().log(Level.SEVERE, "Failed to load plugin " + pluginStripped);
+                                    MineCICD.instance().logError(e);
                                 }
                             }
                         }
@@ -554,28 +562,28 @@ public abstract class GitUtils {
             }
 
             if (changes) {
-                MineCICD.changeBar(bar, getCleanMessage("bossbar-pulled-changes", true), BarColor.GREEN,
+                MineCICD.instance().changeBar(bar, getCleanMessage("bossbar-pulled-changes", true), BarColor.GREEN,
                         BarStyle.SOLID);
             } else {
-                MineCICD.changeBar(bar, getCleanMessage("bossbar-pulled-no-changes", true), BarColor.GREEN,
+                MineCICD.instance().changeBar(bar, getCleanMessage("bossbar-pulled-no-changes", true), BarColor.GREEN,
                         BarStyle.SOLID);
             }
-            MineCICD.removeBar(bar, Config.getInt("bossbar.duration"));
+            MineCICD.instance().removeBar(bar, Config.getInt("bossbar.duration"));
             return changes;
         } catch (final Exception e) {
             if (!(e instanceof IllegalStateException)) {
-                MineCICD.log("Failed to pull changes", Level.SEVERE);
-                MineCICD.logError(e);
-                MineCICD.changeBar(bar, getCleanMessage("bossbar-pull-failed", true), BarColor.RED,
+                MineCICD.logger().log(Level.SEVERE, "Failed to pull changes");
+                MineCICD.instance().logError(e);
+                MineCICD.instance().changeBar(bar, getCleanMessage("bossbar-pull-failed", true), BarColor.RED,
                         BarStyle.SEGMENTED_12);
-                MineCICD.removeBar(bar, Config.getInt("bossbar.duration"));
+                MineCICD.instance().removeBar(bar, Config.getInt("bossbar.duration"));
             } else {
-                MineCICD.removeBar(bar, 0);
+                MineCICD.instance().removeBar(bar, 0);
             }
             throw e;
         } finally {
             if (ownsBusy)
-                busyLock = false;
+                MineCICD.instance().busyLock = false;
         }
     }
 
@@ -599,11 +607,12 @@ public abstract class GitUtils {
             throw new IllegalStateException("Repository has to be pulled (cloned) before changes can be pushed.");
         }
 
-        final boolean ownsBusy = !busyLock;
+        final boolean ownsBusy = !MineCICD.instance().busyLock;
         if (ownsBusy)
-            busyLock = true;
+            MineCICD.instance().busyLock = true;
 
-        final String bar = MineCICD.addBar(getCleanMessage("bossbar-pushing", true), BarColor.BLUE, BarStyle.SOLID);
+        final String bar = MineCICD.instance().addBar(getCleanMessage("bossbar-pushing", true), BarColor.BLUE,
+                BarStyle.SOLID);
 
         try {
             // TODO check if all remote commits have been pulled first
@@ -613,9 +622,9 @@ public abstract class GitUtils {
 
                 final boolean changes = !getLocalChanges().isEmpty();
                 if (!changes) {
-                    MineCICD.changeBar(bar, getCleanMessage("bossbar-push-no-changes", true), BarColor.GREEN,
+                    MineCICD.instance().changeBar(bar, getCleanMessage("bossbar-push-no-changes", true), BarColor.GREEN,
                             BarStyle.SOLID);
-                    MineCICD.removeBar(bar, Config.getInt("bossbar.duration"));
+                    MineCICD.instance().removeBar(bar, Config.getInt("bossbar.duration"));
                     throw new IllegalStateException("No changes to push");
                 }
 
@@ -623,20 +632,20 @@ public abstract class GitUtils {
                 git.push().add(commit.getName()).setCredentialsProvider(getCredentials()).call();
             }
 
-            MineCICD.changeBar(bar, getCleanMessage("bossbar-pushed", true), BarColor.GREEN, BarStyle.SOLID);
-            MineCICD.removeBar(bar, Config.getInt("bossbar.duration"));
+            MineCICD.instance().changeBar(bar, getCleanMessage("bossbar-pushed", true), BarColor.GREEN, BarStyle.SOLID);
+            MineCICD.instance().removeBar(bar, Config.getInt("bossbar.duration"));
         } catch (final Exception e) {
             if (!(e instanceof IllegalStateException)) {
-                MineCICD.log("Failed to push changes", Level.SEVERE);
-                MineCICD.logError(e);
-                MineCICD.changeBar(bar, getCleanMessage("bossbar-push-failed", true), BarColor.RED,
+                MineCICD.logger().log(Level.SEVERE, "Failed to push changes");
+                MineCICD.instance().logError(e);
+                MineCICD.instance().changeBar(bar, getCleanMessage("bossbar-push-failed", true), BarColor.RED,
                         BarStyle.SEGMENTED_12);
-                MineCICD.removeBar(bar, Config.getInt("bossbar.duration"));
+                MineCICD.instance().removeBar(bar, Config.getInt("bossbar.duration"));
             }
             throw e;
         } finally {
             if (ownsBusy)
-                busyLock = false;
+                MineCICD.instance().busyLock = false;
         }
     }
 
@@ -665,11 +674,12 @@ public abstract class GitUtils {
     }
 
     public static int add(final File file, final String author) throws GitAPIException, IOException {
-        final boolean ownsBusy = !busyLock;
+        final boolean ownsBusy = !MineCICD.instance().busyLock;
         if (ownsBusy)
-            busyLock = true;
+            MineCICD.instance().busyLock = true;
 
-        final String bar = MineCICD.addBar(getCleanMessage("bossbar-adding", true), BarColor.BLUE, BarStyle.SOLID);
+        final String bar = MineCICD.instance().addBar(getCleanMessage("bossbar-adding", true), BarColor.BLUE,
+                BarStyle.SOLID);
 
         try {
             if (!activeRepoExists()) {
@@ -694,36 +704,37 @@ public abstract class GitUtils {
             final int after = getIncludedFiles().size();
             final int added = after - before;
 
-            MineCICD.changeBar(bar, getCleanMessage("bossbar-added", true, new HashMap<String, String>() {
+            MineCICD.instance().changeBar(bar, getCleanMessage("bossbar-added", true, new HashMap<String, String>() {
                 {
                     put("amount", String.valueOf(added));
                 }
             }), BarColor.GREEN, BarStyle.SOLID);
-            MineCICD.removeBar(bar, Config.getInt("bossbar.duration"));
+            MineCICD.instance().removeBar(bar, Config.getInt("bossbar.duration"));
             return added;
         } catch (final Exception e) {
             if (!(e instanceof IllegalStateException)) {
-                MineCICD.log("Failed to add file(s)", Level.SEVERE);
-                MineCICD.logError(e);
-                MineCICD.changeBar(bar, getCleanMessage("bossbar-adding-failed", true), BarColor.RED,
+                MineCICD.logger().log(Level.SEVERE, "Failed to add file(s)");
+                MineCICD.instance().logError(e);
+                MineCICD.instance().changeBar(bar, getCleanMessage("bossbar-adding-failed", true), BarColor.RED,
                         BarStyle.SEGMENTED_12);
-                MineCICD.removeBar(bar, Config.getInt("bossbar.duration"));
+                MineCICD.instance().removeBar(bar, Config.getInt("bossbar.duration"));
             } else {
-                MineCICD.removeBar(bar, 0);
+                MineCICD.instance().removeBar(bar, 0);
             }
             throw e;
         } finally {
             if (ownsBusy)
-                busyLock = false;
+                MineCICD.instance().busyLock = false;
         }
     }
 
     public static int remove(final File file, final String author) throws GitAPIException, IOException {
-        final boolean ownsBusy = !busyLock;
+        final boolean ownsBusy = !MineCICD.instance().busyLock;
         if (ownsBusy)
-            busyLock = true;
+            MineCICD.instance().busyLock = true;
 
-        final String bar = MineCICD.addBar(getCleanMessage("bossbar-removing", true), BarColor.BLUE, BarStyle.SOLID);
+        final String bar = MineCICD.instance().addBar(getCleanMessage("bossbar-removing", true), BarColor.BLUE,
+                BarStyle.SOLID);
 
         try {
             if (!activeRepoExists()) {
@@ -749,27 +760,27 @@ public abstract class GitUtils {
 
             final int amountRemoved = amountBefore - amountAfter;
 
-            MineCICD.changeBar(bar, getCleanMessage("bossbar-removed", true, new HashMap<String, String>() {
+            MineCICD.instance().changeBar(bar, getCleanMessage("bossbar-removed", true, new HashMap<String, String>() {
                 {
                     put("amount", String.valueOf(amountRemoved));
                 }
             }), BarColor.GREEN, BarStyle.SOLID);
-            MineCICD.removeBar(bar, Config.getInt("bossbar.duration"));
+            MineCICD.instance().removeBar(bar, Config.getInt("bossbar.duration"));
             return amountRemoved;
         } catch (final Exception e) {
             if (!(e instanceof IllegalStateException)) {
-                MineCICD.log("Failed to remove file(s)", Level.SEVERE);
-                MineCICD.logError(e);
-                MineCICD.changeBar(bar, getCleanMessage("bossbar-removing-failed", true), BarColor.RED,
+                MineCICD.logger().log(Level.SEVERE, "Failed to remove file(s)");
+                MineCICD.instance().logError(e);
+                MineCICD.instance().changeBar(bar, getCleanMessage("bossbar-removing-failed", true), BarColor.RED,
                         BarStyle.SEGMENTED_12);
-                MineCICD.removeBar(bar, Config.getInt("bossbar.duration"));
+                MineCICD.instance().removeBar(bar, Config.getInt("bossbar.duration"));
             } else {
-                MineCICD.removeBar(bar, 0);
+                MineCICD.instance().removeBar(bar, 0);
             }
             throw e;
         } finally {
             if (ownsBusy)
-                busyLock = false;
+                MineCICD.instance().busyLock = false;
         }
     }
 
@@ -778,30 +789,31 @@ public abstract class GitUtils {
             throw new IllegalStateException("Repository has to be pulled (cloned) before it can be reset.");
         }
 
-        final boolean ownsBusy = !busyLock;
+        final boolean ownsBusy = !MineCICD.instance().busyLock;
         if (ownsBusy)
-            busyLock = true;
+            MineCICD.instance().busyLock = true;
 
-        final String bar = MineCICD.addBar(getCleanMessage("bossbar-resetting", true), BarColor.BLUE, BarStyle.SOLID);
+        final String bar = MineCICD.instance().addBar(getCleanMessage("bossbar-resetting", true), BarColor.BLUE,
+                BarStyle.SOLID);
 
         try (Git git = Git.open(new File("."))) {
             git.reset().setMode(ResetCommand.ResetType.HARD).setRef(commit).call();
-            MineCICD.changeBar(bar, getCleanMessage("bossbar-reset", true), BarColor.GREEN, BarStyle.SOLID);
-            MineCICD.removeBar(bar, Config.getInt("bossbar.duration"));
+            MineCICD.instance().changeBar(bar, getCleanMessage("bossbar-reset", true), BarColor.GREEN, BarStyle.SOLID);
+            MineCICD.instance().removeBar(bar, Config.getInt("bossbar.duration"));
         } catch (final Exception e) {
             if (!(e instanceof IllegalStateException)) {
-                MineCICD.log("Failed to reset repository", Level.SEVERE);
-                MineCICD.logError(e);
-                MineCICD.changeBar(bar, getCleanMessage("bossbar-reset-failed", true), BarColor.RED,
+                MineCICD.logger().log(Level.SEVERE, "Failed to reset repository");
+                MineCICD.instance().logError(e);
+                MineCICD.instance().changeBar(bar, getCleanMessage("bossbar-reset-failed", true), BarColor.RED,
                         BarStyle.SEGMENTED_12);
-                MineCICD.removeBar(bar, Config.getInt("bossbar.duration"));
+                MineCICD.instance().removeBar(bar, Config.getInt("bossbar.duration"));
             } else {
-                MineCICD.removeBar(bar, 0);
+                MineCICD.instance().removeBar(bar, 0);
             }
             throw e;
         } finally {
             if (ownsBusy)
-                busyLock = false;
+                MineCICD.instance().busyLock = false;
         }
     }
 
@@ -810,32 +822,34 @@ public abstract class GitUtils {
             throw new IllegalStateException("Repository has to be pulled (cloned) before it can be reverted.");
         }
 
-        final boolean ownsBusy = !busyLock;
+        final boolean ownsBusy = !MineCICD.instance().busyLock;
         if (ownsBusy)
-            busyLock = true;
+            MineCICD.instance().busyLock = true;
 
-        final String bar = MineCICD.addBar(getCleanMessage("bossbar-reverting", true), BarColor.BLUE, BarStyle.SOLID);
+        final String bar = MineCICD.instance().addBar(getCleanMessage("bossbar-reverting", true), BarColor.BLUE,
+                BarStyle.SOLID);
 
         try (Git git = Git.open(new File("."))) {
             final ObjectId commitId = git.getRepository().resolve(commit);
             final RevCommit revCommit = git.revert().include(commitId).call();
             git.push().add(revCommit.getName()).setCredentialsProvider(getCredentials()).call();
-            MineCICD.changeBar(bar, getCleanMessage("bossbar-reverted", true), BarColor.GREEN, BarStyle.SOLID);
-            MineCICD.removeBar(bar, Config.getInt("bossbar.duration"));
+            MineCICD.instance().changeBar(bar, getCleanMessage("bossbar-reverted", true), BarColor.GREEN,
+                    BarStyle.SOLID);
+            MineCICD.instance().removeBar(bar, Config.getInt("bossbar.duration"));
         } catch (final Exception e) {
             if (!(e instanceof IllegalStateException)) {
-                MineCICD.log("Failed to revert repository", Level.SEVERE);
-                MineCICD.logError(e);
-                MineCICD.changeBar(bar, getCleanMessage("bossbar-revert-failed", true), BarColor.RED,
+                MineCICD.logger().log(Level.SEVERE, "Failed to revert repository");
+                MineCICD.instance().logError(e);
+                MineCICD.instance().changeBar(bar, getCleanMessage("bossbar-revert-failed", true), BarColor.RED,
                         BarStyle.SEGMENTED_12);
-                MineCICD.removeBar(bar, Config.getInt("bossbar.duration"));
+                MineCICD.instance().removeBar(bar, Config.getInt("bossbar.duration"));
             } else {
-                MineCICD.removeBar(bar, 0);
+                MineCICD.instance().removeBar(bar, 0);
             }
             throw e;
         } finally {
             if (ownsBusy)
-                busyLock = false;
+                MineCICD.instance().busyLock = false;
         }
     }
 

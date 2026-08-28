@@ -195,7 +195,7 @@ public class GitSecret {
         }
 
         // load the appropriate replace executable into the MineCICD/tools directory
-        File dataDir = MineCICD.plugin.getDataFolder();
+        File dataDir = MineCICD.instance().getDataFolder();
         File toolsDir = new File(dataDir, "tools");
         if (!toolsDir.exists()) {
             toolsDir.mkdirs();
@@ -207,7 +207,7 @@ public class GitSecret {
             return;
         }
 
-        InputStream is = MineCICD.plugin
+        InputStream is = MineCICD.instance()
                 .getResource((SystemUtils.IS_OS_WINDOWS ? "windows-replace.exe" : "linux-replace.exe"));
         if (is == null) {
             throw new IOException("Could not load the MineCICD replace executable");

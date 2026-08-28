@@ -162,7 +162,7 @@ public class BaseCommandTabCompleter implements TabCompleter {
                     return new ArrayList<>();
                 }
 
-                final File scriptsFolder = new File(MineCICD.plugin.getDataFolder().getAbsolutePath() + "/scripts");
+                final File scriptsFolder = new File(MineCICD.instance().getDataFolder().getAbsolutePath() + "/scripts");
                 if (!scriptsFolder.exists()) {
                     return new ArrayList<>();
                 }

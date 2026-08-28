@@ -15,8 +15,6 @@ import org.eclipse.jgit.lib.PersonIdent;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.json.JSONObject;
 
-import static com.lemonlightmc.minecicd.MineCICD.log;
-
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -31,7 +29,7 @@ public class WebhookHandler implements HttpHandler {
     @Override
     public void handle(final HttpExchange t) throws IOException {
         try (final Git git = Git.open(new File("."))) {
-            log("Received webhook trigger", Level.INFO);
+            MineCICD.logger().log(Level.INFO, "Received webhook trigger");
             final StringBuilder sb = new StringBuilder();
             final InputStream ios = t.getRequestBody();
             int i;
@@ -42,7 +40,7 @@ public class WebhookHandler implements HttpHandler {
 
             if (max <= 0) {
                 t.sendResponseHeaders(400, 0);
-                log("Webhook failed to run due to invalid contents", Level.SEVERE);
+                MineCICD.logger().log(Level.SEVERE, "Webhook failed to run due to invalid contents");
                 return;
             }
 
@@ -56,31 +54,31 @@ public class WebhookHandler implements HttpHandler {
 
             final String branch = git.getRepository().getBranch();
             if (!json.getString("ref").equals("refs/heads/" + branch)) {
-                log("Webhook received for branch " + json.getString("ref") + " but expected refs/heads/" + branch,
-                        Level.INFO);
+                MineCICD.logger().log(Level.INFO,
+                        "Webhook received for branch " + json.getString("ref") + " but expected refs/heads/" + branch);
                 return;
             }
 
-            Bukkit.getScheduler().runTaskAsynchronously(MineCICD.plugin, () -> {
-                while (MineCICD.busyLock) {
+            Bukkit.getScheduler().runTaskAsynchronously(MineCICD.instance(), () -> {
+                while (MineCICD.instance().busyLock) {
                     try {
                         Thread.sleep(100);
                     } catch (final InterruptedException e) {
-                        MineCICD.logError(e);
+                        MineCICD.instance().logError(e);
                     }
                 }
 
-                final String bar = MineCICD.addBar(Messages.getCleanMessage("bossbar-webhook-trigger", true),
+                final String bar = MineCICD.instance().addBar(Messages.getCleanMessage("bossbar-webhook-trigger", true),
                         BarColor.BLUE, BarStyle.SOLID);
                 try {
-                    MineCICD.busyLock = true;
+                    MineCICD.instance().busyLock = true;
 
                     final String oldHead = GitUtils.getCurrentRevision();
                     final boolean updated = GitUtils.pull();
                     if (!updated) {
-                        MineCICD.changeBar(bar, Messages.getCleanMessage("bossbar-webhook-no-changes", true),
+                        MineCICD.instance().changeBar(bar, Messages.getCleanMessage("bossbar-webhook-no-changes", true),
                                 BarColor.GREEN, BarStyle.SOLID);
-                        MineCICD.removeBar(bar, Config.getInt("bossbar.duration"));
+                        MineCICD.instance().removeBar(bar, Config.getInt("bossbar.duration"));
                         return;
                     }
                     final String newHead = GitUtils.getCurrentRevision();
@@ -115,7 +113,8 @@ public class WebhookHandler implements HttpHandler {
                                 final String script = command.substring(7).trim();
                                 scripts.add(script);
                             } else {
-                                log("Unknown command in CICD commit message " + command, Level.WARNING);
+                                MineCICD.logger().log(Level.WARNING,
+                                            "Unknown command in CICD commit message " + command);
                             }
                         }
                     }
@@ -179,17 +178,17 @@ public class WebhookHandler implements HttpHandler {
                             try {
                                 p.sendMessage(components);
                             } catch (final Exception e) {
-                                MineCICD.logError(e);
+                                MineCICD.instance().logError(e);
                             }
                         }
                     }
 
                     for (final String cmd : commands) {
                         try {
-                            Bukkit.getScheduler().runTask(MineCICD.plugin,
+                            Bukkit.getScheduler().runTask(MineCICD.instance(),
                                     () -> Bukkit.dispatchCommand(Bukkit.getConsoleSender(), cmd));
                         } catch (final Exception e) {
-                            MineCICD.logError(e);
+                            MineCICD.instance().logError(e);
                         }
                     }
 
@@ -198,7 +197,7 @@ public class WebhookHandler implements HttpHandler {
                             try {
                                 Script.run(script);
                             } catch (final Exception e) {
-                                MineCICD.logError(e);
+                                MineCICD.instance().logError(e);
                             }
                         }
                     }
@@ -223,13 +222,15 @@ public class WebhookHandler implements HttpHandler {
                                 }
 
                                 if (pl == null) {
-                                    log("Could not find plugin " + plugin + " to reload", Level.SEVERE);
+                                    MineCICD.logger().log(Level.SEVERE,
+                                            "Could not find plugin " + plugin + " to reload");
                                     continue;
                                 }
                             }
 
                             try {
-                                MineCICD.plugin.getServer().getScheduler().callSyncMethod(MineCICD.plugin, () -> {
+                                MineCICD.instance().getServer().getScheduler()
+                                            .callSyncMethod(MineCICD.instance(), () -> {
                                     String pluginStripped = plugin;
                                     // up until first "-" or " " or "." or "_"
                                     int index = pluginStripped.indexOf("-");
@@ -245,31 +246,32 @@ public class WebhookHandler implements HttpHandler {
 
                                     String command = "plugman unload " + pluginStripped;
                                     try {
-                                        MineCICD.plugin.getServer().dispatchCommand(
-                                                MineCICD.plugin.getServer().getConsoleSender(), command);
+                                        MineCICD.instance().getServer().dispatchCommand(
+                                                MineCICD.instance().getServer().getConsoleSender(), command);
                                     } catch (final Exception e) {
-                                        MineCICD.log("Failed to unload plugin " + pluginStripped, Level.SEVERE);
-                                        MineCICD.logError(e);
+                                        MineCICD.logger().log(Level.SEVERE,
+                                                "Failed to unload plugin " + pluginStripped);
+                                        MineCICD.instance().logError(e);
                                     }
 
                                     try {
                                         Thread.sleep(50);
                                     } catch (final InterruptedException e) {
-                                        MineCICD.logError(e);
+                                        MineCICD.instance().logError(e);
                                     }
 
                                     command = "plugman load " + pluginStripped;
                                     try {
-                                        MineCICD.plugin.getServer().dispatchCommand(
-                                                MineCICD.plugin.getServer().getConsoleSender(), command);
+                                        MineCICD.instance().getServer().dispatchCommand(
+                                                MineCICD.instance().getServer().getConsoleSender(), command);
                                     } catch (final Exception e) {
-                                        MineCICD.log("Failed to load plugin " + pluginStripped, Level.SEVERE);
-                                        MineCICD.logError(e);
+                                        MineCICD.logger().log(Level.SEVERE, "Failed to load plugin " + pluginStripped);
+                                        MineCICD.instance().logError(e);
                                     }
                                     return null;
                                 }).get();
                             } catch (final Exception e) {
-                                MineCICD.logError(e);
+                                MineCICD.instance().logError(e);
                             }
                         }
                     }
@@ -280,16 +282,18 @@ public class WebhookHandler implements HttpHandler {
                         Bukkit.reload();
                     }
 
-                    MineCICD.changeBar(bar, Messages.getCleanMessage("bossbar-webhook-success", true), BarColor.GREEN,
-                            BarStyle.SOLID);
-                    MineCICD.removeBar(bar, Config.getInt("bossbar.duration"));
+                    MineCICD.instance().changeBar(bar,
+                                                    Messages.getCleanMessage("bossbar-webhook-success", true),
+                                                    BarColor.GREEN, BarStyle.SOLID);
+                    MineCICD.instance().removeBar(bar, Config.getInt("bossbar.duration"));
                 } catch (final Exception e) {
-                    MineCICD.logError(e);
-                    MineCICD.changeBar(bar, Messages.getCleanMessage("bossbar-webhook-failed", true), BarColor.RED,
-                            BarStyle.SEGMENTED_12);
-                    MineCICD.removeBar(bar, Config.getInt("bossbar.duration"));
+                    MineCICD.instance().logError(e);
+                    MineCICD.instance().changeBar(bar,
+                                                    Messages.getCleanMessage("bossbar-webhook-failed", true),
+                                                    BarColor.RED, BarStyle.SEGMENTED_12);
+                    MineCICD.instance().removeBar(bar, Config.getInt("bossbar.duration"));
                 } finally {
-                    MineCICD.busyLock = false;
+                    MineCICD.instance().busyLock = false;
                 }
             });
         }

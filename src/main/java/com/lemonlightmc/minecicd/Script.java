@@ -5,7 +5,6 @@ import org.bukkit.boss.BarColor;
 import org.bukkit.boss.BarStyle;
 
 import static com.lemonlightmc.minecicd.Messages.getMessage;
-import static com.lemonlightmc.minecicd.MineCICD.plugin;
 
 import java.io.File;
 import java.io.IOException;
@@ -20,38 +19,39 @@ import java.util.logging.Level;
 
 public abstract class Script {
     public static void loadDefaultScript() {
-        final File scriptsDir = new File(plugin.getDataFolder(), "scripts");
+        final File scriptsDir = new File(MineCICD.instance().getDataFolder(), "scripts");
         final File exampleScriptFile = new File(scriptsDir, "example_script.sh");
         if (exampleScriptFile.exists())
             return;
         exampleScriptFile.getParentFile().mkdirs();
 
         final InputStreamReader reader = new InputStreamReader(
-                Objects.requireNonNull(MineCICD.plugin.getResource("example_script.sh")), StandardCharsets.UTF_8);
+                Objects.requireNonNull(MineCICD.instance().getResource("example_script.sh")), StandardCharsets.UTF_8);
 
         final Scanner scanner = new Scanner(reader);
         try {
             Files.write(exampleScriptFile.toPath(), scanner.useDelimiter("\\A").next().getBytes());
         } catch (final IOException e) {
-            MineCICD.log("Failed to write example_script.txt", Level.SEVERE);
-            MineCICD.logError(e);
+            MineCICD.logger().log(Level.SEVERE, "Failed to write example_script.txt");
+            MineCICD.instance().logError(e);
         }
     }
 
     public static void run(final String script) throws Exception {
-        final boolean ownsBusy = !MineCICD.busyLock;
-        MineCICD.busyLock = true;
+        final boolean ownsBusy = !MineCICD.instance().busyLock;
+        MineCICD.instance().busyLock = true;
 
-        final String bar = MineCICD.addBar(Messages.getCleanMessage("bossbar-script", true), BarColor.BLUE, BarStyle.SOLID);
+        final String bar = MineCICD.instance().addBar(Messages.getCleanMessage("bossbar-script", true), BarColor.BLUE,
+                BarStyle.SOLID);
         try {
-            final File scriptsFolder = new File(plugin.getDataFolder(), "scripts");
+            final File scriptsFolder = new File(MineCICD.instance().getDataFolder(), "scripts");
             final File scriptFile = new File(scriptsFolder, script + ".sh");
 
             final List<String> lines = Files.readAllLines(scriptFile.toPath().toAbsolutePath());
 
             final int[] result = { -1 };
             final String[] output = { "" };
-            Bukkit.getScheduler().runTask(plugin, () -> {
+            Bukkit.getScheduler().runTask(MineCICD.instance(), () -> {
                 try {
                     for (int i = 0; i < lines.size(); i++) {
                         final String line = lines.get(i);
@@ -83,7 +83,7 @@ public abstract class Script {
                             }
                         } else {
                             final int finalI = i;
-                            Bukkit.getScheduler().runTask(plugin, () -> {
+                            Bukkit.getScheduler().runTask(MineCICD.instance(), () -> {
                                 try {
                                     Bukkit.dispatchCommand(Bukkit.getConsoleSender(), line);
                                     result[0] = 0;
@@ -124,7 +124,7 @@ public abstract class Script {
                         }
                     }
                 } catch (final Exception e) {
-                    MineCICD.logError(e);
+                    MineCICD.instance().logError(e);
                 }
             });
 
@@ -136,17 +136,17 @@ public abstract class Script {
                 throw new Exception(output[0]);
             }
 
-            MineCICD.changeBar(bar, Messages.getCleanMessage("bossbar-script-success", true), BarColor.GREEN,
+            MineCICD.instance().changeBar(bar, Messages.getCleanMessage("bossbar-script-success", true), BarColor.GREEN,
                     BarStyle.SOLID);
-            MineCICD.removeBar(bar, Config.getInt("bossbar.duration"));
+            MineCICD.instance().removeBar(bar, Config.getInt("bossbar.duration"));
         } catch (final Exception e) {
-            MineCICD.changeBar(bar, Messages.getCleanMessage("bossbar-script-failed", true), BarColor.RED,
+            MineCICD.instance().changeBar(bar, Messages.getCleanMessage("bossbar-script-failed", true), BarColor.RED,
                     BarStyle.SEGMENTED_12);
-            MineCICD.removeBar(bar, Config.getInt("bossbar.duration"));
+            MineCICD.instance().removeBar(bar, Config.getInt("bossbar.duration"));
             throw e;
         } finally {
             if (ownsBusy) {
-                MineCICD.busyLock = false;
+                MineCICD.instance().busyLock = false;
             }
         }
     }

@@ -11,15 +11,18 @@ repositories {
 }
 
 dependencies {
-    implementation(libs.eclipse.jgit)
-    implementation(libs.commons.io)
-    implementation(libs.json)
-    implementation(libs.commons.lang3)
     compileOnly(libs.paper.api)
+    implementation(libs.eclipse.jgit)
+    implementation(libs.json)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.paper.api)
+    testRuntimeOnly(libs.junit.engine)
+    testRuntimeOnly(libs.junit.platform.launcher)
 }
 
 group = "com.lemonlightmc"
-version = "2.3.0"
+version = "3.0.0"
 description = "A CI/CD plugin for Minecraft Servers and Networks"
 
 java {
@@ -28,10 +31,34 @@ java {
     withSourcesJar()
 }
 
+sourceSets {
+    main {
+        resources {
+            srcDir("src/main/java/resources")
+        }
+    }
+}
+
+tasks.withType<JavaCompile> {
+    options.release.set(21)
+    options.encoding = "UTF-8"
+}
+
+tasks.withType<Javadoc> {
+    options.encoding = "UTF-8"
+}
+
+tasks.test {
+    useJUnitPlatform()
+}
+
 tasks.shadowJar {
     archiveClassifier.set("")
     mergeServiceFiles()
     exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
+    manifest {
+        attributes["Main-Class"] = "com.lemonlightmc.minecicd.secrets.ReplaceFilter"
+    }
 }
 
 tasks.jar {
@@ -48,12 +75,4 @@ tasks.register("printVersion") {
     doLast {
         println(version)
     }
-}
-
-tasks.withType<JavaCompile> {
-    options.encoding = "UTF-8"
-}
-
-tasks.withType<Javadoc> {
-    options.encoding = "UTF-8"
 }

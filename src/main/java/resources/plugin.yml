@@ -1,0 +1,33 @@
+name: MineCICD
+version: '3.0.0'
+main: com.lemonlightmc.minecicd.MineCICD
+api-version: '1.21'
+prefix: MineCICD
+load: STARTUP
+softdepend:
+  - PlugManX
+authors:
+  - Konstanius
+description: A CI/CD plugin for Minecraft Servers and Networks to speed up development processes, enable version control, and automate server / network management.
+
+permissions:
+  minecicd.*:
+    description: All MineCICD permissions
+    default: op
+    children:
+      minecicd.use: true
+      minecicd.pull: true
+      minecicd.push: true
+      minecicd.add: true
+      minecicd.remove: true
+      minecicd.reset: true
+      minecicd.revert: true
+      minecicd.rollback: true
+      minecicd.log: true
+      minecicd.status: true
+      minecicd.diff: true
+      minecicd.script: true
+      minecicd.resolve: true
+      minecicd.reload: true
+      minecicd.help: true
+      minecicd.notify: true

@@ -18,7 +18,6 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.atomic.AtomicReference;
 
 public class ControlServer {
 
@@ -30,6 +29,10 @@ public class ControlServer {
         ControlStatus controlStatus();
 
         void removeRequest(String requestId);
+
+        boolean tryAcquireInFlight(String requestId);
+
+        void releaseInFlight(String requestId);
     }
 
     private final MineCICD plugin;
@@ -41,10 +44,17 @@ public class ControlServer {
     private final Delegate delegate;
     private final SSLContext sslContext;
     private final long maxBodyBytes;
-    private final AtomicReference<String> inFlight = new AtomicReference<>(null);
+    // M-07/S-08: bounded, expiring per-IP failure counter for rate limiting
+    private final FailureLimiter failureLimiter;
+    private static final int MAX_HEADER_BYTES = 4096;
+    private static final int MAX_EXCHANGES_PER_REQUEST = 4;
+    private static final long SSE_IDLE_TIMEOUT_MS = 60_000L;
+    private static final int MAX_FAILURE_ENTRIES = 10_000;
+    private static final long FAILURE_WINDOW_MS = 10_000L;
 
     private HttpServer server;
     private ExecutorService httpExecutor;
+    private java.util.concurrent.ScheduledExecutorService failurePurger;
 
     public ControlServer(MineCICD plugin, String host, int port, String path, String secret,
                          ControlSecurity security, Delegate delegate, SSLContext sslContext,
@@ -58,6 +68,7 @@ public class ControlServer {
         this.delegate = delegate;
         this.sslContext = sslContext;
         this.maxBodyBytes = maxBodyBytes;
+        this.failureLimiter = new FailureLimiter(MAX_FAILURE_ENTRIES, FAILURE_WINDOW_MS);
     }
 
     private static String normalizePath(String p) {
@@ -76,7 +87,25 @@ public class ControlServer {
             InetSocketAddress address = new InetSocketAddress(host, port);
             if (sslContext != null) {
                 HttpsServer https = HttpsServer.create(address, 0);
-                https.setHttpsConfigurator(new HttpsConfigurator(sslContext));
+                https.setHttpsConfigurator(new HttpsConfigurator(sslContext) {
+                    @Override
+                    public void configure(com.sun.net.httpserver.HttpsParameters params) {
+                        try {
+                            javax.net.ssl.SSLContext ctx = getSSLContext();
+                            javax.net.ssl.SSLParameters sslParams = ctx.getDefaultSSLParameters();
+                            // H-04: restrict to TLSv1.2/1.3
+                            String[] protos = sslParams.getProtocols();
+                            java.util.List<String> allowed = new java.util.ArrayList<>();
+                            for (String p : protos) {
+                                if ("TLSv1.2".equals(p) || "TLSv1.3".equals(p)) allowed.add(p);
+                            }
+                            if (!allowed.isEmpty()) sslParams.setProtocols(allowed.toArray(new String[0]));
+                            params.setSSLParameters(sslParams);
+                        } catch (Exception ignored) {
+                            super.configure(params);
+                        }
+                    }
+                });
                 server = https;
             } else {
                 server = HttpServer.create(address, 0);
@@ -84,6 +113,17 @@ public class ControlServer {
             httpExecutor = java.util.concurrent.Executors.newFixedThreadPool(4,
                     com.lemonlightmc.minecicd.util.Threads.daemonFactory("minecicd-http"));
             server.setExecutor(httpExecutor);
+            // S-08: periodically evict expired failure entries so distinct invalid clients
+            // cannot grow the rate-limit cache without bound.
+            failurePurger = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(
+                    com.lemonlightmc.minecicd.util.Threads.daemonFactory("minecicd-failure-purge"));
+            failurePurger.scheduleWithFixedDelay(() -> {
+                try {
+                    failureLimiter.purgeExpired(System.currentTimeMillis());
+                } catch (Exception e) {
+                    plugin.getLogger().warning("Failure cache purge error: " + e.getMessage());
+                }
+            }, 60, 60, java.util.concurrent.TimeUnit.SECONDS);
             register(server, "/" + path, this::handlePost);
             register(server, "/" + path + "/stream", this::handleStream);
             register(server, "/" + path + "/status", this::handleStatus);
@@ -110,18 +150,31 @@ public class ControlServer {
             httpExecutor.shutdownNow();
             httpExecutor = null;
         }
+        if (failurePurger != null) {
+            failurePurger.shutdownNow();
+            failurePurger = null;
+        }
     }
 
-    private void handlePost(HttpExchange exchange) {
+     private void handlePost(HttpExchange exchange) {
         long startNano = System.nanoTime();
         try {
             if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
                 respond(exchange, 405, "{\"error\":\"Method not allowed\"}");
                 return;
             }
+            if (isRateLimited(exchange)) {
+                respond(exchange, 429, "{\"error\":\"Too many requests\"}");
+                return;
+            }
             String contentType = exchange.getRequestHeaders().getFirst("Content-Type");
             if (contentType == null || !contentType.toLowerCase().startsWith("application/json")) {
                 respond(exchange, 415, "{\"error\":\"Content-Type must be application/json\"}");
+                return;
+            }
+            // L-02/M-07: reject oversized headers before body read
+            if (isHeaderTooLarge(exchange)) {
+                respond(exchange, 431, "{\"error\":\"Headers too large\"}");
                 return;
             }
             byte[] body = readBody(exchange);
@@ -143,6 +196,7 @@ public class ControlServer {
             try {
                 authenticate(exchange, request.requestId(), body);
             } catch (ControlSecurity.RejectException e) {
+                recordFailure(exchange);
                 respond(exchange, 401, "{\"error\":\"Unauthorized\"}");
                 return;
             }
@@ -161,7 +215,7 @@ public class ControlServer {
                 respond(exchange, 403, "{\"error\":\"Branch not allowed\"}");
                 return;
             }
-            if (!inFlight.compareAndSet(null, request.requestId())) {
+            if (!delegate.tryAcquireInFlight(request.requestId())) {
                 respond(exchange, 409, "{\"error\":\"Another request is already in flight\"}");
                 return;
             }
@@ -178,11 +232,15 @@ public class ControlServer {
     }
 
     private boolean branchMatches(String requested) {
-        if (requested == null) {
-            return true;
-        }
         var cfg = plugin.getConfigRecord();
         if (cfg == null) {
+            return false;
+        }
+        // L-03: normalize null to configured branch, then strict allowlist
+        if (requested == null) {
+            requested = cfg.git().branch();
+        }
+        if (requested == null) {
             return false;
         }
         if (requested.equals(cfg.git().branch())) {
@@ -204,6 +262,14 @@ public class ControlServer {
             respond(exchange, 405, "{\"error\":\"Method not allowed\"}");
             return;
         }
+        if (isRateLimited(exchange)) {
+            respond(exchange, 429, "{\"error\":\"Too many requests\"}");
+            return;
+        }
+        if (isHeaderTooLarge(exchange)) {
+            respond(exchange, 431, "{\"error\":\"Headers too large\"}");
+            return;
+        }
         String requestId = query(exchange, "requestId");
         if (requestId == null || !Ids.isValidRequestId(requestId)) {
             respond(exchange, 400, "{\"error\":\"Missing requestId\"}");
@@ -217,13 +283,21 @@ public class ControlServer {
         try {
             authenticate(exchange, requestId, body);
         } catch (ControlSecurity.RejectException e) {
+            recordFailure(exchange);
             respond(exchange, 401, "{\"error\":\"Unauthorized\"}");
+            return;
+        }
+        // L-04: cap exchanges per requestId
+        ProgressStream existing = delegate.progressStream(requestId);
+        if (existing != null && existing.exchanges().size() >= MAX_EXCHANGES_PER_REQUEST) {
+            respond(exchange, 429, "{\"error\":\"Too many streams\"}");
             return;
         }
         exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
         exchange.getResponseHeaders().set("Cache-Control", "no-store");
         exchange.getResponseHeaders().set("Connection", "keep-alive");
-        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+        exchange.getResponseHeaders().set("X-Accel-Buffering", "no");
+        // M-02: removed Access-Control-Allow-Origin: * (SSE is server-to-server)
         try {
             exchange.sendResponseHeaders(200, 0);
         } catch (IOException e) {
@@ -234,19 +308,30 @@ public class ControlServer {
             stream = new ProgressStream();
         }
         final ProgressStream activeStream = stream;
-        activeStream.add(exchange);
-        // Keep this exchange alive on a daemon thread until stream closes.
+        if (!activeStream.add(exchange)) {
+            try { exchange.close(); } catch (Exception ignored) {}
+            return;
+        }
+        // L-04: waiter with idle timeout and proper exchange close
         Thread waiter = new Thread(() -> {
+            long start = System.currentTimeMillis();
             try {
                 int current = 0;
                 while (!activeStream.isClosed()) {
+                    if (System.currentTimeMillis() - start > SSE_IDLE_TIMEOUT_MS) {
+                        activeStream.close();
+                        break;
+                    }
                     int count = delegate.controlStatus().eventCount(requestId);
                     if (count > current) {
                         current = count;
+                        start = System.currentTimeMillis();
                     }
                     Thread.sleep(1000);
                 }
             } catch (InterruptedException ignored) {
+            } finally {
+                try { exchange.close(); } catch (Exception ignored) {}
             }
         }, "minecicd-stream-" + requestId);
         waiter.setDaemon(true);
@@ -258,6 +343,14 @@ public class ControlServer {
             respond(exchange, 405, "{\"error\":\"Method not allowed\"}");
             return;
         }
+        if (isRateLimited(exchange)) {
+            respond(exchange, 429, "{\"error\":\"Too many requests\"}");
+            return;
+        }
+        if (isHeaderTooLarge(exchange)) {
+            respond(exchange, 431, "{\"error\":\"Headers too large\"}");
+            return;
+        }
         String requestId = query(exchange, "requestId");
         if (requestId == null || !Ids.isValidRequestId(requestId)) {
             respond(exchange, 400, "{\"error\":\"Missing requestId\"}");
@@ -271,6 +364,7 @@ public class ControlServer {
         try {
             authenticate(exchange, requestId, body);
         } catch (ControlSecurity.RejectException e) {
+            recordFailure(exchange);
             respond(exchange, 401, "{\"error\":\"Unauthorized\"}");
             return;
         }
@@ -343,6 +437,50 @@ public class ControlServer {
             } catch (Exception ignored) {
             }
         }
+    }
+
+    private boolean isHeaderTooLarge(HttpExchange exchange) {
+        long total = 0;
+        for (java.util.Map.Entry<String, java.util.List<String>> entry : exchange.getRequestHeaders().entrySet()) {
+            String name = entry.getKey();
+            if (name != null) {
+                if (name.length() > MAX_HEADER_BYTES) {
+                    return true;
+                }
+                total += name.length();
+                if (total > MAX_HEADER_BYTES * 4) {
+                    return true;
+                }
+            }
+            for (String v : entry.getValue()) {
+                if (v != null) {
+                    if (v.length() > MAX_HEADER_BYTES) {
+                        return true;
+                    }
+                    total += v.length();
+                    if (total > MAX_HEADER_BYTES * 4) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean isRateLimited(HttpExchange exchange) {
+        String ip = clientIp(exchange);
+        return failureLimiter.isRateLimited(ip, System.currentTimeMillis());
+    }
+
+    private void recordFailure(HttpExchange exchange) {
+        String ip = clientIp(exchange);
+        failureLimiter.recordFailure(ip, System.currentTimeMillis());
+    }
+
+    private static String clientIp(HttpExchange exchange) {
+        return exchange.getRemoteAddress() != null
+                ? exchange.getRemoteAddress().getAddress().getHostAddress()
+                : "unknown";
     }
 
     private static String jsonEscape(String s) {

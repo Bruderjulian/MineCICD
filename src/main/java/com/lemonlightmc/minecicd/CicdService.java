@@ -8,6 +8,7 @@ import com.lemonlightmc.minecicd.git.GitException;
 import com.lemonlightmc.minecicd.git.GitService;
 import com.lemonlightmc.minecicd.git.Results;
 import com.lemonlightmc.minecicd.http.ControlServer;
+import com.lemonlightmc.minecicd.http.ControlSecurity;
 import com.lemonlightmc.minecicd.http.ControlStatus;
 import com.lemonlightmc.minecicd.http.ProgressStream;
 import com.lemonlightmc.minecicd.messaging.Messages;
@@ -27,6 +28,7 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Orchestrates git operations, feedback, and the control API request queue. All
@@ -48,6 +50,7 @@ public class CicdService implements ControlServer.Delegate {
     private final ExecutorService worker;
     private volatile boolean serverStarted = false;
     private final Object resumeLock = new Object();
+    private final AtomicReference<String> inFlight = new AtomicReference<>(null);
 
     public CicdService(MineCICD plugin, MineCICDConfig config, GitService git,
                        ScriptRunner scriptRunner, BossBars bossBar, Messages messages,
@@ -104,15 +107,37 @@ public class CicdService implements ControlServer.Delegate {
         if (commits == null || commits.isEmpty()) {
             return;
         }
+        ControlSecurity policy = buildPolicy();
         for (org.eclipse.jgit.revwalk.RevCommit commit : commits) {
             for (Action action : CommitActions.parseCommitMessage(commit)) {
                 if (action.type() == ActionType.PULL) {
+                    continue;
+                }
+                // C-02: gate commit actions through same policy as HTTP control API
+                try {
+                    policy.validateActions(List.of(action));
+                } catch (ControlSecurity.RejectException e) {
+                    plugin.getLogger().warning("Skipping commit action disallowed by policy: " + action + " (" + e.getMessage() + ")");
                     continue;
                 }
                 plugin.getLogger().info("Running commit action: " + action);
                 executeAction(action, null, null);
             }
         }
+    }
+
+    private ControlSecurity buildPolicy() {
+        var control = config.control();
+        var actions = control.actions();
+        java.util.Map<ActionType, Boolean> flags = new java.util.HashMap<>();
+        flags.put(ActionType.PULL, actions.pull());
+        flags.put(ActionType.PUSH, actions.push());
+        flags.put(ActionType.RESTART, actions.restart());
+        flags.put(ActionType.GLOBAL_RELOAD, actions.globalReload());
+        flags.put(ActionType.RELOAD_PLUGIN, actions.reloadPlugins());
+        flags.put(ActionType.COMMAND, actions.commands());
+        flags.put(ActionType.SCRIPT, actions.scripts());
+        return new ControlSecurity(control.replayWindowSeconds(), flags, actions.commandAllow(), actions.scriptAllow());
     }
 
     public CompletableFuture<Boolean> push(CommandSender sender, String message) {
@@ -276,15 +301,38 @@ public class CicdService implements ControlServer.Delegate {
     // ----------------------------------------------------------------- control API
 
     @Override
+    public boolean tryAcquireInFlight(String requestId) {
+        String cur = inFlight.get();
+        if (cur == null) {
+            return inFlight.compareAndSet(null, requestId);
+        }
+        // idempotent retry for same id while in-flight
+        return cur.equals(requestId);
+    }
+
+    @Override
+    public void releaseInFlight(String requestId) {
+        inFlight.compareAndSet(requestId, null);
+    }
+
+    @Override
     public void acceptRequest(String requestId, List<Action> actions, String branch) {
-        PendingRequest request = new PendingRequest(requestId, actions, branch);
         PendingRequest existing = pendingStore.load(requestId).orElse(null);
-        if (existing != null && existing.status() != Status.RUNNING) {
-            // idempotent retry: report the stored terminal status
+        if (existing != null) {
+            if (existing.status() != Status.RUNNING) {
+                // idempotent retry: report the stored terminal status and release inFlight
+                // acquired in handlePost so a different requestId is not blocked forever
+                controlStatus.update(requestId, existing.status(), existing.error(),
+                        existing.index(), existing.total());
+                releaseInFlight(requestId);
+                return;
+            }
+            // H-03: existing RUNNING -> do not overwrite, resume from stored progress
             controlStatus.update(requestId, existing.status(), existing.error(),
                     existing.index(), existing.total());
             return;
         }
+        PendingRequest request = new PendingRequest(requestId, actions, branch);
         pendingStore.save(request);
         controlStatus.update(requestId, Status.RUNNING, null, request.index(), request.total());
         runRequestAsync(request);
@@ -304,6 +352,7 @@ public class CicdService implements ControlServer.Delegate {
     public void removeRequest(String requestId) {
         streams.remove(requestId);
         controlStatus.clear(requestId);
+        releaseInFlight(requestId);
     }
 
     private void runRequestAsync(PendingRequest request) {
@@ -319,7 +368,8 @@ public class CicdService implements ControlServer.Delegate {
         try {
             while (request.hasRemaining()) {
                 Action action = request.current();
-                stream.broadcast("action:" + action);
+                // M-06: escape action before broadcast to SSE
+                stream.broadcast("action:" + Messages.escape(String.valueOf(action)));
                 boolean ok = executeAction(action, request.branch(), requestId);
                 controlStatus.bump(requestId);
                 if (ok) {
@@ -328,12 +378,12 @@ public class CicdService implements ControlServer.Delegate {
                     controlStatus.update(requestId, Status.RUNNING, null,
                             request.index(), request.total());
                 } else {
-                    String message = "action '" + action + "' failed";
+                    String message = "action '" + Messages.escape(String.valueOf(action)) + "' failed";
                     request.failed(message);
                     pendingStore.save(request);
                     controlStatus.update(requestId, Status.FAILED, message,
                             request.index(), request.total());
-                    stream.broadcast("failed:" + message);
+                    stream.broadcast("failed:" + Messages.escape(message));
                     stream.close();
                     removeRequest(requestId);
                     return;
@@ -346,7 +396,7 @@ public class CicdService implements ControlServer.Delegate {
             stream.close();
             removeRequest(requestId);
         } catch (Exception e) {
-            String message = safeMessage(e);
+            String message = Messages.escape(safeMessage(e));
             request.failed(message);
             pendingStore.save(request);
             controlStatus.update(requestId, Status.FAILED, message,

@@ -32,6 +32,37 @@ public class ControlRequest {
     }
 
     public static ControlRequest parse(String body) {
+        // M-08: mitigate deep-nesting JSON bomb within 65KB - reject depth > 64 outside strings
+        if (body != null) {
+            int depth = 0, maxDepth = 0;
+            boolean inString = false;
+            boolean escaped = false;
+            for (int i = 0; i < body.length(); i++) {
+                char c = body.charAt(i);
+                if (escaped) {
+                    escaped = false;
+                    continue;
+                }
+                if (c == '\\' && inString) {
+                    escaped = true;
+                    continue;
+                }
+                if (c == '"') {
+                    inString = !inString;
+                    continue;
+                }
+                if (inString) {
+                    continue;
+                }
+                if (c == '{' || c == '[') {
+                    depth++;
+                    if (depth > maxDepth) maxDepth = depth;
+                    if (maxDepth > 64) throw new ParseException("JSON too deeply nested");
+                } else if (c == '}' || c == ']') {
+                    depth = Math.max(0, depth - 1);
+                }
+            }
+        }
         JSONObject json;
         try {
             json = new JSONObject(body);

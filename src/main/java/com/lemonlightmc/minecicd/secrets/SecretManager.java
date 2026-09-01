@@ -129,6 +129,27 @@ public class SecretManager {
         }
     }
 
+    private static void hardenPermissions(Path file) {
+        try {
+            // H-02: set rw------- (600)
+            java.util.Set<java.nio.file.attribute.PosixFilePermission> set = java.util.EnumSet.noneOf(java.nio.file.attribute.PosixFilePermission.class);
+            set.add(java.nio.file.attribute.PosixFilePermission.OWNER_READ);
+            set.add(java.nio.file.attribute.PosixFilePermission.OWNER_WRITE);
+            Files.setPosixFilePermissions(file, set);
+        } catch (UnsupportedOperationException | IOException ignored) {
+            // Windows fallback
+            try {
+                File f = file.toFile();
+                f.setReadable(false, false);
+                f.setWritable(false, false);
+                f.setExecutable(false, false);
+                f.setReadable(true, true);
+                f.setWritable(true, true);
+            } catch (Exception ignored2) {
+            }
+        }
+    }
+
     private void writeGitConfig() {
         Path gitDir = plugin.getServerRoot().resolve(".git");
         if (!Files.isDirectory(gitDir)) {
@@ -166,11 +187,14 @@ public class SecretManager {
     }
 
     public String cleanCommand() {
-        return "java -jar \"" + pluginJarPath() + "\" clean \"" + mappingFile() + "\"";
+        // %f is substituted by git with the path of the file being filtered. Passing it
+        // lets ReplaceFilter scope substitution to the target file (S-07) so a secret from
+        // one file is never written into another.
+        return "java -jar \"" + pluginJarPath() + "\" clean \"" + mappingFile() + "\" %f";
     }
 
     public String smudgeCommand() {
-        return "java -jar \"" + pluginJarPath() + "\" smudge \"" + mappingFile() + "\"";
+        return "java -jar \"" + pluginJarPath() + "\" smudge \"" + mappingFile() + "\" %f";
     }
 
     private String pluginJarPath() {
@@ -201,6 +225,18 @@ public class SecretManager {
                     writer.write(Base64.getEncoder().encodeToString(entry.getValue()));
                     writer.newLine();
                 }
+            }
+            hardenPermissions(mappingFile.toPath());
+            // harden secrets.yml itself (600) and warn if still world-readable
+            Path secretsYml = plugin.getServerRoot().resolve("secrets.yml");
+            if (Files.exists(secretsYml)) {
+                hardenPermissions(secretsYml);
+                try {
+                    java.util.Set<java.nio.file.attribute.PosixFilePermission> perms = Files.getPosixFilePermissions(secretsYml);
+                    if (perms.contains(java.nio.file.attribute.PosixFilePermission.OTHERS_READ) || perms.contains(java.nio.file.attribute.PosixFilePermission.GROUP_READ)) {
+                        plugin.getLogger().warning("secrets.yml is world-readable; run chmod 600 " + secretsYml);
+                    }
+                } catch (Exception ignored) {}
             }
         } catch (IOException e) {
             plugin.getLogger().warning("Unable to write secrets mapping: " + e.getMessage());

@@ -23,10 +23,15 @@ public class ProgressStream {
         return exchanges;
     }
 
-    public void add(HttpExchange exchange) {
-        if (!closed.get()) {
-            exchanges.add(exchange);
+    public boolean add(HttpExchange exchange) {
+        if (closed.get()) {
+            return false;
         }
+        if (exchanges.size() >= 4) {
+            return false;
+        }
+        exchanges.add(exchange);
+        return true;
     }
 
     public synchronized void broadcast(String data) {

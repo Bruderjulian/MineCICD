@@ -108,9 +108,18 @@ public class ScriptRunner {
                 pb.command("sh", "-c", command);
             }
             pb.redirectErrorStream(true);
+            // M-04: sandbox - restrict working dir, sanitize env
+            pb.directory(plugin.getServerRoot().toFile());
+            // clear and allowlist minimal env
+            java.util.Map<String, String> env = pb.environment();
+            String path = env.get("PATH");
+            String home = env.get("HOME");
+            env.clear();
+            if (path != null) env.put("PATH", path);
+            if (home != null) env.put("HOME", home);
             Process process = pb.start();
             InputStream out = process.getInputStream();
-            new Thread(() -> {
+            Thread drain = new Thread(() -> {
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(out, StandardCharsets.UTF_8))) {
                     String l;
                     while ((l = reader.readLine()) != null) {
@@ -118,8 +127,17 @@ public class ScriptRunner {
                     }
                 } catch (IOException ignored) {
                 }
-            }, "minecicd-script-out").start();
-            int exit = process.waitFor();
+            }, "minecicd-script-out");
+            drain.setDaemon(true);
+            drain.start();
+            plugin.getLogger().info("[script] Executing (line " + line + "): " + command);
+            // M-04: per-script timeout 30s
+            boolean finished = process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                throw new ScriptException("Shell command timed out (line " + line + "): " + command);
+            }
+            int exit = process.exitValue();
             if (exit != 0) {
                 throw new ScriptException("Shell command failed (line " + line + "): " + command + " (exit " + exit + ")");
             }
@@ -146,7 +164,22 @@ public class ScriptRunner {
                 return null;
             }
         }
-        return file.normalize();
+        // M-03: canonical-path confinement - follow symlinks in all parent components
+        Path normalized = file.normalize().toAbsolutePath();
+        Path base = scriptsDir.normalize().toAbsolutePath();
+        if (!normalized.startsWith(base)) {
+            return null;
+        }
+        try {
+            Path realBase = base.toRealPath();
+            Path realFile = normalized.toRealPath();
+            if (!realFile.startsWith(realBase)) {
+                return null;
+            }
+        } catch (IOException ignored) {
+            // base or file does not exist yet - fall back to normalized check above
+        }
+        return normalized;
     }
 
     private String rootMessage(Throwable t) {

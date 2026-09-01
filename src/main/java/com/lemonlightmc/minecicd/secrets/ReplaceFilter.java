@@ -58,9 +58,33 @@ public final class ReplaceFilter {
         return map;
     }
 
-    public static String clean(String input, Map<byte[], byte[]> mapping) {
+    public static String placeholder(String key) {
+        return "__MCICD_" + Base64.getEncoder().encodeToString(key.getBytes(StandardCharsets.UTF_8)) + "__";
+    }
+
+    /**
+     * Extracts the protected file path from a mapping key ({@code file + '\u0000' + secretKey}).
+     *
+     * @return the file prefix, or the whole key if there is no NUL separator
+     */
+    static String fileOf(byte[] key) {
+        String keyStr = new String(key, StandardCharsets.UTF_8);
+        int nul = keyStr.indexOf('\u0000');
+        return nul >= 0 ? keyStr.substring(0, nul) : keyStr;
+    }
+
+    /**
+     * Clean that only substitutes secrets belonging to the {@code targetFile} being filtered.
+     * Mapping entries whose file prefix does not match the target are ignored, so a secret
+     * or placeholder belonging to one file is never written into another file.
+     */
+    public static String clean(String input, Map<byte[], byte[]> mapping, String targetFile) {
+        String normalizedTarget = targetFile != null ? targetFile.replace('\\', '/') : null;
         String current = input;
         for (Map.Entry<byte[], byte[]> entry : mapping.entrySet()) {
+            if (!normalizedTarget.equals(fileOf(entry.getKey()).replace('\\', '/'))) {
+                continue;
+            }
             String key = new String(entry.getKey(), StandardCharsets.UTF_8);
             String value = new String(entry.getValue(), StandardCharsets.UTF_8);
             String placeholder = placeholder(key);
@@ -71,9 +95,18 @@ public final class ReplaceFilter {
         return current;
     }
 
-    public static String smudge(String input, Map<byte[], byte[]> mapping) {
+    /**
+     * Smudge that only restores secrets belonging to the {@code targetFile} being filtered.
+     * Placeholders belonging to other files are left untouched, preventing one file's secret
+     * from being inserted into another.
+     */
+    public static String smudge(String input, Map<byte[], byte[]> mapping, String targetFile) {
+        String normalizedTarget = targetFile != null ? targetFile.replace('\\', '/') : null;
         String current = input;
         for (Map.Entry<byte[], byte[]> entry : mapping.entrySet()) {
+            if (!normalizedTarget.equals(fileOf(entry.getKey()).replace('\\', '/'))) {
+                continue;
+            }
             String key = new String(entry.getKey(), StandardCharsets.UTF_8);
             String value = new String(entry.getValue(), StandardCharsets.UTF_8);
             String placeholder = placeholder(key);
@@ -82,28 +115,30 @@ public final class ReplaceFilter {
         return current;
     }
 
-    public static String placeholder(String key) {
-        return "__MCICD_" + Base64.getEncoder().encodeToString(key.getBytes(StandardCharsets.UTF_8)) + "__";
-    }
-
     public static void main(String[] args) {
         String direction = null;
         String mappingPath = null;
+        String targetFile = null;
         for (String arg : args) {
             if ("clean".equals(arg) || "smudge".equals(arg)) {
                 direction = arg;
             } else if (mappingPath == null) {
                 mappingPath = arg;
+            } else if (targetFile == null) {
+                targetFile = arg;
             }
         }
         if (direction == null || mappingPath == null) {
-            System.err.println("Usage: java -jar MineCICD.jar <clean|smudge> <mappingFile>");
+            System.err.println("Usage: java -jar MineCICD.jar <clean|smudge> <mappingFile> [targetFile]");
             System.exit(2);
         }
         try {
             Map<byte[], byte[]> mapping = loadMapping(new File(mappingPath));
             String input = new String(System.in.readAllBytes(), StandardCharsets.UTF_8);
-            String output = "clean".equals(direction) ? clean(input, mapping) : smudge(input, mapping);
+            // When git invokes the filter it substitutes %f as the path of the file being
+            // filtered; scope the substitution to that file so secrets are never applied
+            // across files (S-07).
+            String output = apply(direction, input, mapping, targetFile);
             try (BufferedWriter writer = new BufferedWriter(
                     new OutputStreamWriter(System.out, StandardCharsets.UTF_8))) {
                 writer.write(output);
@@ -113,5 +148,27 @@ public final class ReplaceFilter {
             System.err.println("MineCICD replace filter error: " + t.getMessage());
             System.exit(1);
         }
+    }
+
+    private static String apply(String direction, String input, Map<byte[], byte[]> mapping, String targetFile) {
+        if (targetFile == null || targetFile.isBlank()) {
+            // No path supplied; retain the legacy behavior so callers without %f still work.
+            String current = input;
+            for (Map.Entry<byte[], byte[]> entry : mapping.entrySet()) {
+                String key = new String(entry.getKey(), StandardCharsets.UTF_8);
+                String value = new String(entry.getValue(), StandardCharsets.UTF_8);
+                String placeholder = placeholder(key);
+                if (!value.isEmpty()) {
+                    current = "clean".equals(direction)
+                            ? current.replace(value, placeholder)
+                            : current.replace(placeholder, value);
+                }
+            }
+            return current;
+        }
+        String normalizedTarget = targetFile.replace('\\', '/');
+        return "clean".equals(direction)
+                ? clean(input, mapping, normalizedTarget)
+                : smudge(input, mapping, normalizedTarget);
     }
 }

@@ -20,6 +20,8 @@ class ReplaceFilterTest {
         return map;
     }
 
+    private static final String TARGET = "plugins/example/config.yml";
+
     private static byte[] b(String s) {
         return s.getBytes(StandardCharsets.UTF_8);
     }
@@ -27,7 +29,7 @@ class ReplaceFilterTest {
     @Test
     void cleanReplacesValuesWithPlaceholders() {
         String input = "password: s3cr3t!\ntoken: abc:def/ghi\n";
-        String cleaned = ReplaceFilter.clean(input, mapping());
+        String cleaned = ReplaceFilter.clean(input, mapping(), TARGET);
         assertFalse(cleaned.contains("s3cr3t!"));
         assertFalse(cleaned.contains("abc:def/ghi"));
         assertTrue(cleaned.contains(ReplaceFilter.placeholder("plugins/example/config.yml\u0000database_password")));
@@ -38,7 +40,7 @@ class ReplaceFilterTest {
     void smudgeRestoresValues() {
         String input = "password: " + ReplaceFilter.placeholder("plugins/example/config.yml\u0000database_password")
                 + "\ntoken: " + ReplaceFilter.placeholder("plugins/example/config.yml\u0000token") + "\n";
-        String smudged = ReplaceFilter.smudge(input, mapping());
+        String smudged = ReplaceFilter.smudge(input, mapping(), TARGET);
         assertTrue(smudged.contains("s3cr3t!"));
         assertTrue(smudged.contains("abc:def/ghi"));
     }
@@ -46,7 +48,7 @@ class ReplaceFilterTest {
     @Test
     void cleanThenSmudgeIsIdentity() {
         String original = "password: s3cr3t!\ntoken: abc:def/ghi\nother: value\n";
-        String roundTrip = ReplaceFilter.smudge(ReplaceFilter.clean(original, mapping()), mapping());
+        String roundTrip = ReplaceFilter.smudge(ReplaceFilter.clean(original, mapping(), TARGET), mapping(), TARGET);
         assertEquals(original, roundTrip);
     }
 
@@ -56,6 +58,74 @@ class ReplaceFilterTest {
         String b = ReplaceFilter.placeholder("keyA");
         assertEquals(a, b);
         assertFalse(a.contains("keyA"), "placeholder must not leak the raw key");
+    }
+
+    @Test
+    void duplicateValueAcrossTwoFilesIsScopedToTarget() {
+        // Both files happen to use the same secret value; clean must only rewrite the
+        // value inside the file being filtered, and smudge must only restore the matching.
+        Map<byte[], byte[]> twoFiles = new LinkedHashMap<>();
+        twoFiles.put(b("plugins/a/config.yml\u0000password"), b("shared-secret"));
+        twoFiles.put(b("plugins/b/config.yml\u0000password"), b("shared-secret"));
+
+        String fileA = "password: shared-secret\n";
+        // Cleaning file A must produce file A's placeholder, not file B's.
+        String cleanedA = ReplaceFilter.clean(fileA, twoFiles, "plugins/a/config.yml");
+        assertTrue(cleanedA.contains(ReplaceFilter.placeholder("plugins/a/config.yml\u0000password")));
+        assertFalse(cleanedA.contains(ReplaceFilter.placeholder("plugins/b/config.yml\u0000password")));
+        assertFalse(cleanedA.contains("shared-secret"));
+
+        String cleanedB = ReplaceFilter.clean(fileA, twoFiles, "plugins/b/config.yml");
+        assertTrue(cleanedB.contains(ReplaceFilter.placeholder("plugins/b/config.yml\u0000password")));
+        assertFalse(cleanedB.contains(ReplaceFilter.placeholder("plugins/a/config.yml\u0000password")));
+    }
+
+    @Test
+    void smudgeNeverWritesASecretIntoTheWrongFile() {
+        Map<byte[], byte[]> twoFiles = new LinkedHashMap<>();
+        twoFiles.put(b("plugins/a/config.yml\u0000password"), b("secret-a"));
+        twoFiles.put(b("plugins/b/config.yml\u0000password"), b("secret-b"));
+
+        // file A contains A's placeholder; smudging A must yield only secret-a, never secret-b.
+        String placeholderA = ReplaceFilter.placeholder("plugins/a/config.yml\u0000password");
+        String smudgedA = ReplaceFilter.smudge(placeholderA, twoFiles, "plugins/a/config.yml");
+        assertTrue(smudgedA.contains("secret-a"));
+        assertFalse(smudgedA.contains("secret-b"));
+        assertFalse(smudgedA.contains(placeholderA));
+
+        // file B must only yield secret-b.
+        String placeholderB = ReplaceFilter.placeholder("plugins/b/config.yml\u0000password");
+        String smudgedB = ReplaceFilter.smudge(placeholderB, twoFiles, "plugins/b/config.yml");
+        assertTrue(smudgedB.contains("secret-b"));
+        assertFalse(smudgedB.contains("secret-a"));
+    }
+
+    @Test
+    void overlappingSecretValuesAcrossTwoFilesAreIsolated() {
+        // secret value "token" appears in both files; a placeholder from file A must never
+        // be substituted (or smudged) while processing file B.
+        Map<byte[], byte[]> twoFiles = new LinkedHashMap<>();
+        twoFiles.put(b("plugins/a/config.yml\u0000token"), b("token"));
+        twoFiles.put(b("plugins/b/config.yml\u0000token"), b("token"));
+
+        // Cleaning A leaves B's placeholder untouched.
+        String inputA = "value: " + ReplaceFilter.placeholder("plugins/b/config.yml\u0000token") + "\n";
+        String cleanedA = ReplaceFilter.clean(inputA, twoFiles, "plugins/a/config.yml");
+        assertTrue(cleanedA.contains(ReplaceFilter.placeholder("plugins/b/config.yml\u0000token")),
+                "foreign placeholder must be left as-is, not resolved to a real secret");
+
+        // Smudging A must not resolve B's placeholder.
+        String smudgedA = ReplaceFilter.smudge(inputA, twoFiles, "plugins/a/config.yml");
+        assertTrue(smudgedA.contains(ReplaceFilter.placeholder("plugins/b/config.yml\u0000token")));
+        assertFalse(smudgedA.contains("token"), "real secret value must not leak into another file");
+    }
+
+    @Test
+    void targetFileUsesForwardSlashesRegardlessOfInputSeparator() {
+        Map<byte[], byte[]> map = new LinkedHashMap<>();
+        map.put(b("plugins/a/config.yml\u0000password"), b("pw"));
+        String cleaned = ReplaceFilter.clean("password: pw\n", map, "plugins\\a\\config.yml");
+        assertTrue(cleaned.contains(ReplaceFilter.placeholder("plugins/a/config.yml\u0000password")));
     }
 
     @Test

@@ -31,3 +31,10 @@ Thumbs.db
 # Logs
 logs/
 *.log
+
+# MineCICD secrets (never commit)
+/secrets.yml
+/secrets.filter
+/plugins/MineCICD/
+secrets.filter
+pending/

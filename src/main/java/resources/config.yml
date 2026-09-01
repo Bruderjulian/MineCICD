@@ -1,0 +1,80 @@
+git:
+  # Username or token
+  user: ""
+  # Password or token (if using token, use it as both user and pass)
+  pass: ""
+  # Repository URL
+  repo: ""
+  # Email used for commits created by the plugin (author/committer)
+  email: "minecicd@minecicd.local"
+  # Selected branch, default is master or main
+  # Use this to set up development servers, production servers, and test servers and the like
+  # This has an effect on everything from pushing, pulling, and the control API
+  branch: "master"
+
+# Whether experimental jar unloading and loading should be enabled
+# This requires PlugManX to be installed and working on your server
+# This is experimental and may cause issues!
+# Will inevitably cause a lot of issues if used on library or core plugins
+# Requires you to remove "*.jar" from the .gitignore file in your server root
+experimental-jar-loading: false
+
+bossbar:
+  # Whether to enable the boss bar
+  enabled: true
+  # How long the action result should be visible for, in ticks (20 ticks = 1 second)
+  # High values here WILL delay further commands of the same type
+  duration: 100
+
+# Control API (job-driven deploy). The official GitHub Action lemonlightmc/minecicd-deploy
+# signs requests with HMAC-SHA256 and actively drives actions here; there is no passive webhook.
+# Only loopback is exposed by default; expose it behind a reverse proxy for remote deploys.
+control:
+  # Bind address; 127.0.0.1 by default, expose via reverse proxy
+  host: "127.0.0.1"
+  # Port to listen on; set to 0 to disable the control API
+  port: 8080
+  # Base path of the control API
+  path: "minecicd"
+  # HMAC secret, REQUIRED - the API refuses to start when this is empty (>= 32 bytes recommended)
+  secret: ""
+  # Native HTTPS; requires a keystore (JKS or PKCS12). If TLS terminates at a reverse proxy,
+  # leave this disabled and keep the loopback listener plain HTTP.
+  tls:
+    enabled: false
+    keystore: ""
+    password: ""
+  # Default commit message used by the `push` action (or override it with push:<message>)
+  push-message: "Auto-commit by MineCICD"
+  # Optional branch allowlist; empty = only the configured git.branch is accepted
+  branches: []
+  # Request body size cap (DoS guard)
+  max-body-bytes: 65536
+  # Reject requests with a timestamp older than this many seconds
+  replay-window-seconds: 300
+  # Per-action enable flags. commands / scripts are OFF by default and, when enabled,
+  # restricted to the exact command-name / script-file allowlists below (fail-closed).
+  actions:
+    pull: true
+    push: true
+    restart: true
+    global-reload: false
+    reload-plugins: true
+    commands:
+      # Whether command actions are allowed at all
+      enabled: false
+      # Exact command-name allowlist (first whitespace token of command:<cmd>)
+      allow:
+        - say
+        - save-all
+    scripts:
+      # Whether script actions are allowed at all
+      enabled: false
+      # Exact script file-name allowlist (No path traversal)
+      allow:
+        - deploy
+        - backup
+
+# DO NOT CHANGE THIS
+# Format: 3.x.x -> 30000
+version: 30000

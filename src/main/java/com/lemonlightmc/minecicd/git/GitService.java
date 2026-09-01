@@ -346,9 +346,10 @@ public class GitService {
 
     private void ensureRemote() {
         String url = config.get().git().repo();
-        if (url == null || url.isBlank()) {
-            throw new GitException("No remote repository configured (git.repo)");
-        }
+        // L-06/S-06: enforce an allowlist of authenticated, encrypted transports.
+        // git:// has no transport authentication or encryption; a network attacker
+        // could impersonate the remote and alter files during a pull.
+        validateRemoteUrl(url);
         try {
             boolean hasOrigin = repo.getConfig().getSubsections("remote").contains("origin");
             if (hasOrigin) {
@@ -358,6 +359,33 @@ public class GitService {
             }
         } catch (Exception e) {
             throw new GitException("Unable to configure remote: " + rootMessage(e), e);
+        }
+    }
+
+    /**
+     * Validates that a configured remote URL uses an authenticated, encrypted transport.
+     * Allowed schemes:
+     * <ul>
+     *   <li>{@code https://} - HTTPS transport with server certificate verification.</li>
+     *   <li>{@code ssh://[user@]host/path} - SSH transport.</li>
+     *   <li>{@code git@host:path} - scp-style SSH URL.</li>
+     * </ul>
+     * Explicitly rejected: {@code git://} (unauthenticated, unencrypted), {@code file://},
+     * {@code ext::}, and any URL containing {@code ..} (path traversal / transport smuggling).
+     *
+     * @throws GitException if the URL is null, blank, or uses a disallowed transport
+     */
+    static void validateRemoteUrl(String url) {
+        if (url == null || url.isBlank()) {
+            throw new GitException("No remote repository configured (git.repo)");
+        }
+        String lower = url.toLowerCase();
+        if (lower.startsWith("file://") || lower.startsWith("ext::") || lower.contains("..")
+                || lower.startsWith("git://")) {
+            throw new GitException("Remote URL not allowed: " + url);
+        }
+        if (!(lower.startsWith("https://") || lower.startsWith("ssh://") || lower.startsWith("git@"))) {
+            throw new GitException("Remote URL must be https://, ssh:// or git@, got: " + url);
         }
     }
 
@@ -689,8 +717,13 @@ public class GitService {
                 throw new GitException("Invalid path: " + pathSpec);
             }
         }
-        boolean dir = p.endsWith("/") || Files.isDirectory(serverRoot.resolve(p));
-        return dir ? p + "/" : p;
+        // M-05: rely solely on syntactic trailing '/' (TOCTOU-safe); callers must include '/' for directories
+        Path resolved = serverRoot.resolve(p).normalize().toAbsolutePath();
+        Path base = serverRoot.normalize().toAbsolutePath();
+        if (!resolved.startsWith(base)) {
+            throw new GitException("Path escapes server root: " + pathSpec);
+        }
+        return p;
     }
 
     private String rootMessage(Throwable t) {

@@ -7,7 +7,6 @@ import com.lemonlightmc.minecicd.util.Ids;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -21,10 +20,11 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class ControlSecurity {
 
-    /** Cleared on every accepted request to bound memory. */
-    private final Set<String> seenNonces = ConcurrentHashMap.newKeySet();
+    // M-01: time-windowed nonce cache to bound memory and allow expiry
+    private final ConcurrentHashMap<String, Long> seenNonces = new ConcurrentHashMap<>();
 
     private final long replayWindowSeconds;
+    private static final int MAX_NONCES = 10_000;
     private final Map<ActionType, Boolean> enabled;
     private final Set<String> allowedCommands;
     private final Set<String> allowedScripts;
@@ -69,14 +69,27 @@ public class ControlSecurity {
             throw new RejectException("Invalid timestamp");
         }
         long now = System.currentTimeMillis() / 1000L;
-        if (Math.abs(now - timestamp) > replayWindowSeconds) {
+        // L-02: distinguish future vs past instead of Math.abs
+        if (timestamp > now + replayWindowSeconds) {
+            throw new RejectException("Timestamp too far in future");
+        }
+        if (now - timestamp > replayWindowSeconds) {
             throw new RejectException("Timestamp outside replay window");
         }
         if (nonceHeader == null || nonceHeader.isEmpty()) {
             throw new RejectException("Missing nonce");
         }
-        String canonical = timestamp + "|" + nonceHeader + "|" + requestIdHeader + "|"
-                + new String(body, StandardCharsets.UTF_8);
+        if (nonceHeader.length() > 256) {
+            throw new RejectException("Nonce too large");
+        }
+        // M-01: prune expired nonces
+        pruneNonces(now);
+        if (seenNonces.size() >= MAX_NONCES) {
+            throw new RejectException("Nonce cache full");
+        }
+        // L-01: hash body to make canonical non-ambiguous on '|' in body
+        String bodyHash = sha256Hex(body);
+        String canonical = timestamp + "|" + nonceHeader + "|" + requestIdHeader + "|" + bodyHash;
         byte[] expected = hmac(secret, canonical.getBytes(StandardCharsets.UTF_8));
         byte[] actual = hexDecode(providedMac);
         if (actual == null || actual.length != expected.length) {
@@ -85,8 +98,9 @@ public class ControlSecurity {
         if (!MessageDigest.isEqual(expected, actual)) {
             throw new RejectException("Invalid signature");
         }
-        // Replay guard: fail if nonce already seen this session.
-        if (!seenNonces.add(nonceHeader)) {
+        // Replay guard: fail if nonce already seen within window
+        Long prev = seenNonces.putIfAbsent(nonceHeader, now);
+        if (prev != null) {
             throw new RejectException("Replayed nonce");
         }
     }
@@ -189,5 +203,18 @@ public class ControlSecurity {
         String trimmed = command.trim();
         int space = trimmed.indexOf(' ');
         return space < 0 ? trimmed : trimmed.substring(0, space);
+    }
+
+    private void pruneNonces(long nowSeconds) {
+        seenNonces.entrySet().removeIf(e -> nowSeconds - e.getValue() > replayWindowSeconds + 60);
+    }
+
+    private static String sha256Hex(byte[] data) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            return hex(md.digest(data == null ? new byte[0] : data));
+        } catch (Exception e) {
+            throw new IllegalStateException("SHA-256 not available", e);
+        }
     }
 }

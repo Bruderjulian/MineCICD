@@ -81,7 +81,8 @@ class ControlSecurityTest {
         String requestId = "req-1";
         String body = "{}";
         byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
-        String canonical = ts + "|" + nonce + "|" + requestId + "|" + body;
+        String bodyHash = sha256Hex(bodyBytes);
+        String canonical = ts + "|" + nonce + "|" + requestId + "|" + bodyHash;
         String mac = ControlSecurity.hex(ControlSecurity.hmac(secret, canonical.getBytes(StandardCharsets.UTF_8)));
 
         assertDoesNotThrow(() -> sec.authenticate(secret, ts, nonce, requestId, mac, bodyBytes));
@@ -93,11 +94,20 @@ class ControlSecurityTest {
 
         // replayed nonce rejected
         String nonce2 = "nonce-2";
-        String canonical2 = ts + "|" + nonce2 + "|" + requestId + "|" + body;
+        String canonical2 = ts + "|" + nonce2 + "|" + requestId + "|" + bodyHash;
         String mac2 = ControlSecurity.hex(ControlSecurity.hmac(secret, canonical2.getBytes(StandardCharsets.UTF_8)));
         assertDoesNotThrow(() -> sec.authenticate(secret, ts, nonce2, requestId, mac2, bodyBytes));
         assertThrows(ControlSecurity.RejectException.class, () -> sec.authenticate(
                 secret, ts, nonce2, requestId, mac2, bodyBytes));
+    }
+
+    private static String sha256Hex(byte[] data) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            return ControlSecurity.hex(md.digest(data == null ? new byte[0] : data));
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     @Test
@@ -105,10 +115,12 @@ class ControlSecurityTest {
         ControlSecurity sec = security();
         String secret = "a-very-strong-secret-value-0123456789";
         String farFuture = String.valueOf(System.currentTimeMillis() / 1000L + 100_000);
-        String canonical = farFuture + "|n|r|body";
+        byte[] bodyBytes = "body".getBytes(StandardCharsets.UTF_8);
+        String bodyHash = sha256Hex(bodyBytes);
+        String canonical = farFuture + "|n|r|" + bodyHash;
         String mac = ControlSecurity.hex(ControlSecurity.hmac(secret, canonical.getBytes(StandardCharsets.UTF_8)));
         assertThrows(ControlSecurity.RejectException.class, () -> sec.authenticate(
-                secret, farFuture, "n", "r", mac, "body".getBytes(StandardCharsets.UTF_8)));
+                secret, farFuture, "n", "r", mac, bodyBytes));
     }
 
     @Test

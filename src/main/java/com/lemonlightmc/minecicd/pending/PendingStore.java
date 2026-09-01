@@ -56,6 +56,7 @@ public class PendingStore {
             JSONObject json = new JSONObject(Files.readString(file, StandardCharsets.UTF_8));
             return Optional.of(PendingRequest.fromJson(json));
         } catch (Exception e) {
+            System.err.println("[MineCICD] Warning: corrupted pending file " + requestId + ".json: " + e.getMessage());
             return Optional.empty();
         }
     }
@@ -71,7 +72,8 @@ public class PendingStore {
                     try {
                         JSONObject json = new JSONObject(Files.readString(p, StandardCharsets.UTF_8));
                         out.add(PendingRequest.fromJson(json));
-                    } catch (Exception ignored) {
+                    } catch (Exception e) {
+                        System.err.println("[MineCICD] Warning: corrupted pending file " + p.getFileName() + ": " + e.getMessage());
                     }
                 });
             }

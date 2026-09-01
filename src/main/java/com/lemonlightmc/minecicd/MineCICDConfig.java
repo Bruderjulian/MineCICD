@@ -66,10 +66,12 @@ public class MineCICDConfig {
         }
         try {
             config.save(file);
+            hardenPermissions(file.toPath());
         } catch (Exception e) {
             plugin.getLogger().warning("Unable to save config.yml: " + e.getMessage());
         }
         readRecords();
+        warnIfWorldReadable(file.toPath());
     }
 
     private void patchConfig(File file, YamlConfiguration defaults) {
@@ -99,6 +101,7 @@ public class MineCICDConfig {
         if (changed) {
             try {
                 config.save(file);
+                hardenPermissions(file.toPath());
             } catch (Exception e) {
                 plugin.getLogger().warning("Unable to save config.yml: " + e.getMessage());
             }
@@ -111,6 +114,33 @@ public class MineCICDConfig {
         }
         config.set(base + ".allow", new ArrayList<>(List.of()));
         return true;
+    }
+
+    private static void hardenPermissions(java.nio.file.Path file) {
+        try {
+            java.util.Set<java.nio.file.attribute.PosixFilePermission> set = java.util.EnumSet.noneOf(java.nio.file.attribute.PosixFilePermission.class);
+            set.add(java.nio.file.attribute.PosixFilePermission.OWNER_READ);
+            set.add(java.nio.file.attribute.PosixFilePermission.OWNER_WRITE);
+            java.nio.file.Files.setPosixFilePermissions(file, set);
+        } catch (UnsupportedOperationException | java.io.IOException ignored) {
+            try {
+                java.io.File f = file.toFile();
+                f.setReadable(false, false);
+                f.setWritable(false, false);
+                f.setExecutable(false, false);
+                f.setReadable(true, true);
+                f.setWritable(true, true);
+            } catch (Exception ignored2) {}
+        }
+    }
+
+    private void warnIfWorldReadable(java.nio.file.Path file) {
+        try {
+            java.util.Set<java.nio.file.attribute.PosixFilePermission> perms = java.nio.file.Files.getPosixFilePermissions(file);
+            if (perms.contains(java.nio.file.attribute.PosixFilePermission.OTHERS_READ) || perms.contains(java.nio.file.attribute.PosixFilePermission.GROUP_READ)) {
+                plugin.getLogger().warning(file.getFileName() + " is world-readable; run chmod 600 " + file);
+            }
+        } catch (Exception ignored) {}
     }
 
     private void readRecords() {

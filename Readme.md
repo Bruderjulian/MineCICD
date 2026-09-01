@@ -1,149 +1,293 @@
-<hr style="border: 1px solid green;">
-<h2 style="color:green">MineCICD 2.0 has been released!</h2>
-<h3 style="color:green">Version 2.0 is a complete rewrite of the plugin, focussed on:</h3>
-<li style="color:green">Improving performance of all operations</li>
-<li style="color:green">Expanding compatibility to MS Windows and across versions</li>
-<li style="color:green">Fixing bugs and making operations more reliable</li>
-<li style="color:green">Adding new, suggested features</li>
-<h3 style="color:green">Version 2.0 Changelog:</h3>
-<li style="color:green">Git repository root is now the same as the server root</li>
-<li style="color:green">Compatibility for Microsoft Windows added (no more file path issues)</li>
-<li style="color:green">Removed whitelisting / blacklisting in the config, now done with .gitignore file</li>
-<li style="color:green">Fixed most issues listed on GitHub</li>
-<hr style="border: 1px solid green;">
-<h2 style="color:red">Updating from MineCICD 1.* to 2.0 will reset the config! See Migration steps below</h2>
+# MineCICD 3.0.0
 
-# MineCICD 2.1.2
-#### Minecraft Versions [Paper / Spigot] 1.8.* - 1.21.*
-## Continuous Integration, Continuous Delivery - Now for Minecraft Servers
+**Continuous Integration & Continuous Delivery for Minecraft Servers.**
 
-### What is MineCICD?
-MineCICD is a tool used for Minecraft Server and Network development, which can massively speed up all
-setup- and configuration processes. It tracks all changes with Version Control System Integration, allows for
-fast and safe reverts, rollbacks, insight into changes / bug tracking and much more.
+MineCICD turns your Minecraft server root into a Git repository, letting you track server configurations, plugins, and scripts in version control. Pull remote changes, push server edits, define commit-triggered actions (restart, reload, run commands, run scripts), and automate deploys from GitHub Actions — all without leaving the server.
 
-Developers can use their personal IDE to edit files on their own Machine, push changes to the Repository, which
-automatically applies the changes on the server and performs arbitrarily defined actions / commands / scripts,
-with support for server shell commands.
+Supports **Paper** (primary) and **Spigot** across Minecraft versions **1.8 – 1.21+**, and runs on **Java 21+**.
 
-Networks may make use of MineCICD to manage multiple servers, plugins, and configurations across all servers
-simultaneously, with the ability to track changes and apply them to all servers at once!
+---
 
-## Installation & Setup
-1. Download the plugin from the latest release on GitHub (https://github.com/Konstanius/MineCICD/releases)
-2. Add the plugin into your plugins folder
-3. Restart the Minecraft server
-4. Create a Git repository (For example on GitHub at https://github.com/new or similar)
-5. Link the repository and your access credentials in the config
-    - For GitHub, you must use a Personal Access Token
-      - Get the token from https://github.com/settings/tokens
-      - It must have full repo permissions
-      - Set it in the config.yml under both `git.user` and `git.pass`
-    - Other Git providers may require different credentials
-      - Set them in the config.yml under `git.user` and `git.pass` accordingly
-6. Reload the config with `/minecicd reload`
-7. Load the repository with `/minecicd pull`
+## Table of Contents
 
-### Now you are all set! - Time to start syncing
-- Add files to Git Tracking with `/minecicd add <file>`
-- Load changes made to the repository with `/minecicd pull`
-- (Optionally) push changes from your server to the repository with `/minecicd push <commit message>`
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Basic Usage](#basic-usage)
+- [Commit Actions](#commit-actions)
+- [Secrets](#secrets)
+- [Scripts](#scripts)
+- [Commands Reference](#commands-reference)
+- [Permissions Reference](#permissions-reference)
+- [GitHub Actions Setup](#github-actions-setup)
+- [Migrating from 1.x / 2.x](#migrating-from-1x--2x)
+- [Troubleshooting](#troubleshooting)
 
-### Which files should be tracked?
-- All files that are part of the server setup and configuration should be tracked
-- This includes plugins, server configurations, scripts, and other files that are part of the server setup
-- **You should NOT track player data, world data, or other files that are generated and updated dynamically**
-   - **Tracking world or player data will inevitably lead to conflicts and issues**
+---
 
-### Instant commit propagation setup
-1. Create a webhook for your repository (Repo settings -> Webhooks -> Add webhook)
-    - Payload URL: `http://<your server ip>:8080/minecicd` (Port / Path configurable in `config.yml`)
-    - Content type: `application/json`
-    - Set it to trigger only for `The push event`
-2. You're all set! Now you can also use commit actions
+## Prerequisites
 
-### Commit Actions
-Commit Actions are actions that are performed when a commit is pushed to the repository.<br>
-They can range from restarting / reloading the server or individual plugins to executing game commands or
-defined scripts containing game commands or shell commands.<br>
-You can define commit actions as follows:
+| Requirement | Details |
+|---|---|
+| Minecraft server | Paper (recommended) or Spigot, version 1.8 – 1.21+ |
+| Java | 21 or newer |
+| Git repository | A remote repository (GitHub, GitLab, Bitbucket, self-hosted) |
+| Access token | A GitHub Personal Access Token with **contents: read + write** scope on the repo (or equivalent for other providers) |
+
+---
+
+## Installation
+
+1. Download the latest `MineCICD.jar` from the [Releases page](https://github.com/Konstanius/MineCICD/releases).
+2. Drop the JAR into your server's `plugins/` folder.
+3. Restart the server. MineCICD generates its default config and scripts on first boot.
+4. Edit `plugins/MineCICD/config.yml` with your Git credentials and repository URL (see [Configuration](#configuration)).
+5. Run `/minecicd reload` to apply the config, then `/minecicd pull` to clone (or fetch) the repository.
+
+---
+
+## Configuration
+
+All settings live in `plugins/MineCICD/config.yml`.
+
+### Git credentials
+
 ```yaml
-# Execution order is top to bottom for commands, scripts and restart / reload
-# Only one of restart / global-reload / reload (plugin(s)) is performed.
-<any other commit message>
-CICD restart (Will only stop the server, starting relies on your restart script / server host)
-CICD global-reload (Reload the entire server using the reload command)
-CICD reload <plugin-name> (Multiple plugins via separate lines can be specified (Requires PlugManX))
-CICD run <command> (Multiple commands via separate lines can be specified)
-CICD script <script-name> (Multiple scripts via separate lines can be specified)
-<...>
+git:
+  user: ""   # Username or Personal Access Token
+  pass: ""   # Password or Personal Access Token
+  repo: ""   # Remote repository URL (https:// or ssh://)
+  branch: "master"
 ```
 
-### Secrets
-Secrets are a way of storing sensitive information, such as passwords or API keys, in a dedicated, untracked file.<br>
-They are defined in the `/secrets.yml` directory, following the following format:
+- **HTTPS remotes**: Set both `user` and `pass` to your Personal Access Token.
+- **SSH remotes**: Use an SSH URL (`ssh://git@github.com/user/repo.git` or `git@github.com:user/repo.git`) with a deploy key. Leave `user` / `pass` empty.
+- Plain `git://` URLs are rejected (no auth or encryption).
+
+### Control API
+
+The Control API lets GitHub Actions (or any HMAC-signed client) trigger deploys on your server.
+
 ```yaml
-# secrets.yml
-# For each file, create an index here
-# (It is not used for anything, only to uniquely identify each secrets config block)
+control:
+  host: "127.0.0.1"          # Bind address — keep on loopback
+  port: 8080
+  path: "minecicd"            # URL path suffix
+  secret: ""                  # REQUIRED — at least 32 bytes, used for HMAC-SHA256
+  tls:
+    enabled: false            # Enable native HTTPS (see below)
+    keystore: ""
+    password: ""
+  push-message: "Auto-commit by MineCICD"
+  branches: []                # Empty = all branches
+  max-body-bytes: 65536
+  replay-window-seconds: 300
+  actions:
+    pull: true
+    push: true
+    restart: true
+    global-reload: false
+    reload-plugins: true
+    commands:
+      enabled: false
+      allow: [say, save-all]  # Exact command names only
+    scripts:
+      enabled: false
+      allow: [deploy, backup] # Exact script names only
+```
+
+> **Security**: Keep the listener on `127.0.0.1` and terminate TLS at a reverse proxy (nginx, Caddy, etc.). Never expose the raw HTTP endpoint to the internet. Alternatively, enable native HTTPS with `control.tls` using a JKS or PKCS12 keystore.
+
+### Other options
+
+```yaml
+experimental-jar-loading: false  # Hot-load plugin JARs (requires PlugManX)
+bossbar:
+  enabled: true
+  duration: 100                  # Ticks to show boss bar feedback
+```
+
+---
+
+## Basic Usage
+
+The typical workflow is: **add → commit → push → pull**.
+
+```
+# 1. Track files or directories
+/minecicd add plugins/MyPlugin/
+/minecicd add server.properties
+
+# 2. Commit and push your changes
+/minecicd push "Updated MyPlugin config"
+
+# 3. On another server (or after a remote push), pull changes
+/minecicd pull
+```
+
+### What to track
+
+| Track | Don't track |
+|---|---|
+| Plugin configs (`plugins/*/config.yml`) | Player data (`world/playerdata/`) |
+| Server configs (`server.properties`, `bukkit.yml`) | World files (`world/`, `world_nether/`) |
+| Scripts and tooling | Runtime-generated logs |
+| Custom plugin JARs (with caution) | Dynamically updated databases |
+
+---
+
+## Commit Actions
+
+Append `CICD` directives to any commit message. MineCICD parses them on pull and executes the actions in order.
+
+```yaml
+Updated lobby signs
+CICD restart
+CICD run say Server updating in 5 seconds
+CICD script deploy
+```
+
+| Directive | Behavior |
+|---|---|
+| `CICD restart` | Stops the server (your restart script / host process handles restart) |
+| `CICD global-reload` | Runs the server `reload` command |
+| `CICD reload <plugin>` | Unloads and reloads a specific plugin (requires [PlugManX](https://www.spigotmc.org/resources/plugmanx.88135/)) |
+| `CICD run <command>` | Executes a Minecraft command (e.g., `say Hello`) |
+| `CICD script <name>` | Runs a script from `plugins/MineCICD/scripts/` |
+
+Multiple `reload`, `run`, and `script` directives can appear on separate lines. Only one of `restart` / `global-reload` / `reload <plugin>` is performed per commit (first match wins).
+
+---
+
+## Secrets
+
+Secrets let you store sensitive values (database passwords, API keys, license keys) that are substituted into tracked files at pull time but never committed to the repository.
+
+### Setup
+
+1. Edit `plugins/MineCICD/secrets.yml`:
+
+```yaml
 1:
-   # Each block needs to have its file path specified
-   file: "plugins/example-plugin-1/config.yml"
-   # Add secrets for each block
-   # the key (before the ":" will be the value that replaces the secret)
-   # the value (after the ":") will be the actual secret
-   database_password: "password"
-   database_username: "username"
+  file: "plugins/MyPlugin/config.yml"
+  database_password: "s3cret_p@ss"
+  api_key: "abc-123-def"
 2:
-   file: "plugins/example-plugin-2/config.yml"
-   license_key: "license_key"
+  file: "plugins/AnotherPlugin/config.yml"
+  license_key: "XXXX-YYYY-ZZZZ"
 ```
-After modifying this file, make sure to reload the plugin with `/minecicd reload` to apply the changes.<br>
-These secrets will never be visible in the repository, but will be only be contained in the local server files.<br>
-Since Windows does not come with the `sed` command, MineCICD ships with a custom implementation for Windows: `plugins/MineCICD/tools/windows-replace.exe`.<br>
-If your Linux installation does not have `sed`, MineCICD will use another custom implementation: `plugins/MineCICD/tools/linux-replace.exe`.<br>
 
-### Scripts
-Scripts are a way of storing procedures of Minecraft commands and system shell commands.<br>
-They are defined in the `plugins/MineCICD/scripts` directory as `<script_name>.sh` files.<br>
-For a detailed description about the syntax, see the `plugins/MineCICD/scripts/example_script.sh` file.
+2. Reload: `/minecicd reload`
 
-### Version Tracking for jar files
-Tracking plugin jarfiles with Git is currently only experimentally supported and can cause issues.<br>
-This is due to issues with File Locks and the way Java handles jar files, but is being worked on.<br>
-This feature is disabled by default, to enable it, do the following:
-- Remove the `*.jar` line from the `.gitignore` file in the server root
-- Install PlugManX on your server (https://www.spigotmc.org/resources/plugmanx.88135/)
-- Enable the `experimental-jar-loading` option in the config.yml and reload MineCICD (`/minecicd reload`)
+When MineCICD pulls, it replaces every key in the working tree with its corresponding value. The clean filter reverses this before committing so secrets never enter the repository.
 
-This will unload and load plugins if their jarfiles change, are removed. or new ones are added
+> **Windows note**: MineCICD ships a built-in replacement tool at `plugins/MineCICD/tools/windows-replace.exe`. Linux builds also include `linux-replace.exe` as a fallback if `sed` is unavailable.
 
-## Commands
-- `minecicd pull` - Pulls the latest changes from the remote or sets up the local repository if run for the first time.
-- `minecicd push <commit message>` - Pushes the latest changes to the remote.
-- `minecicd add <file / 'directory/'>` - Adds a file or directory to the repository.
-- `minecicd remove <file / 'directory/'>` - Removes a file or directory from the repository.
-- `minecicd reset <commit hash / link>` - Hard resets the current branch to the specified commit. (Commits will not be reverted)
-- `minecicd rollback <dd.MM.yyyy HH:mm:ss>` - Hard resets the current branch to the latest commit before the specified date. (Commits will not be reverted)
-- `minecicd revert <commit hash / link>` - Attempts to revert a specific commits changes.
-- `minecicd script <script name>` - Runs a script from the scripts folder.
-- `minecicd log <page / commit hash / link>` - Shows the commits made on the current branch.
-- `minecicd status` - Shows the current status of the plugin, repository, Webhook listener, and changes.
-- `minecicd resolve <merge-abort / repo-reset / reset-local-changes>` - Resolves conflicts by either aborting the merge, resetting the repository, or removing local changes.
-- `minecicd diff <local / remote>` - Shows uncommited changes (local) or unpulled changes on the remote branch (remote).
-- `minecicd reload` - Reloads the plugin configuration and webhook webserver.
-- `minecicd help` - Shows this help message.
+---
 
-## Permissions
-- `minecicd.<subcommand>` - Allows the user to use the subcommand
-- `minecicd.notify` - Allows the user to receive notifications from actions performed by MineCICD
+## Scripts
 
-## Migrating from MineCICD 1.* to 2.0
-1. Push any changes made on your server to the repository!
-2. Install the new version of MineCICD
-3. Copy the existing token from the old config and save them somewhere
-4. The entire plugin directory of MineCICD will reset (No server files are affected)
-5. Set up the new config with the token, repository url, branch name and other settings
-6. Run `/minecicd pull` to clone the repository
-  - MineCICD should automatically detect which files were added to the repository
-  - If not, manually add them with `/minecicd add <file / 'directory/'>`
+Scripts are executable files in `plugins/MineCICD/scripts/`. They can contain Minecraft console commands, shell commands, or both.
+
+1. Create a `.sh` file in the scripts directory (e.g., `deploy.sh`).
+2. Reference it in a commit message: `CICD script deploy`
+3. Or run it manually: `/minecicd script deploy`
+
+See `plugins/MineCICD/scripts/example_script.sh` for syntax examples.
+
+---
+
+## Commands Reference
+
+All commands are subcommands of `/minecicd` (alias: `/mcicd`).
+
+| Command | Description |
+|---|---|
+| `/minecicd pull [force]` | Fetch and merge remote changes. First run initialises the repo. |
+| `/minecicd push <message>` | Stage all changes, commit, and push. |
+| `/minecicd add <path>` | Add a file or directory to the managed `.gitignore` and track it. |
+| `/minecicd remove <path>` | Remove a file or directory from tracking. |
+| `/minecicd reset <commit>` | Hard-reset the branch to a specific commit. |
+| `/minecicd revert <commit>` | Revert a commit's changes (creates a new commit). |
+| `/minecicd rollback <dd.MM.yyyy HH:mm:ss>` | Hard-reset to the latest commit before the given date. |
+| `/minecicd log [page\|commit]` | View commit history, or details of a specific commit. |
+| `/minecicd status` | Show plugin, repo, webhook, and change status. |
+| `/minecicd diff <local\|remote>` | Show uncommitted changes (local) or unpulled remote changes. |
+| `/minecicd script <name>` | Run a named script. |
+| `/minecicd resolve <action>` | Resolve conflicts: `merge-abort`, `repo-reset`, or `reset-local-changes`. |
+| `/minecicd reload` | Reload config and webhook server. |
+| `/minecicd help` | Show help. |
+
+---
+
+## Permissions Reference
+
+| Permission | Description |
+|---|---|
+| `minecicd.<subcommand>` | Grants access to a specific subcommand (e.g., `minecicd.pull`). |
+| `minecicd.notify` | Receive in-game notifications from MineCICD actions. |
+
+Use a permissions manager (LuckPerms, etc.) to assign these to groups or players.
+
+---
+
+## GitHub Actions Setup
+
+MineCICD provides an official GitHub Action for automated deploys: [lemonlightmc/minecicd-deploy](https://github.com/lemonlightmc/minecicd-deploy).
+
+### Quick start
+
+1. Set `control.secret` in your server's `config.yml` (at least 32 bytes).
+2. Configure which actions are allowed under `control.actions` (enable only what you need).
+3. Add the secret as a repository secret in GitHub (`Settings → Secrets → Actions`), e.g. `MINECICD_SECRET`.
+4. Add the action to your workflow:
+
+```yaml
+- name: Deploy to server
+  uses: lemonlightmc/minecicd-deploy@v1
+  with:
+    server-url: ${{ secrets.MINECICD_URL }}     # e.g. https://your-server:8080/minecicd
+    secret: ${{ secrets.MINECICD_SECRET }}
+    actions: pull,restart                        # comma-separated list
+```
+
+The action signs each request with HMAC-SHA256 and drives the deploy to completion. You can poll the `/stream` (SSE) and `/status` endpoints with the same signature to follow progress.
+
+---
+
+## Migrating from 1.x / 2.x
+
+Version 3.0.0 is a complete rewrite. The config format has changed and the plugin directory will reset.
+
+1. **Push all in-progress changes** on your server to the remote repository.
+2. **Stop the server** and back up `plugins/MineCICD/config.yml` (copy your token, repo URL, and branch name).
+3. **Delete** the entire `plugins/MineCICD/` directory (no server files are affected).
+4. **Install** the new MineCICD 3.0.0 JAR.
+5. **Start the server** — MineCICD generates a fresh config.
+6. **Edit** `config.yml` with your Git credentials, repo URL, and branch.
+7. Run `/minecicd reload` then `/minecicd pull`.
+8. MineCICD should auto-detect tracked files. If not, add them manually with `/minecicd add`.
+
+> Your `secrets.yml` and `scripts/` are also reset. Back them up before step 3 and restore them after step 7.
+
+---
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `/minecicd pull` says "repo not initialised" | Run `/minecicd pull` again — first run clones the repo. Check that `git.repo` is correct. |
+| Push fails with 401 / 403 | Verify your Personal Access Token has **contents: read + write** scope. Check `git.user` and `git.pass`. |
+| SSH remote fails | Ensure the server's SSH key is added as a deploy key on the remote. Check `ssh-keyscan` output. |
+| Control API returns 403 | The HMAC signature is invalid. Ensure `control.secret` matches on server and client. Check timestamp skew. |
+| Control API returns 409 | Another request is already in flight. Wait for it to finish (only one request at a time). |
+| Secrets not replacing | Run `/minecicd reload` after editing `secrets.yml`. Check key names match exactly. |
+| Merge conflicts | Run `/minecicd resolve merge-abort` to undo, or `/minecicd resolve repo-reset` to reset. |
+| Plugin not loading after pull | Check the Paper/Spigot console for errors. If using `experimental-jar-loading`, ensure PlugManX is installed. |
+| Boss bar not showing | Check `bossbar.enabled` in config. Ensure your client supports Adventure boss bars (1.19.3+). |
+
+---
+
+## License
+
+See the [LICENSE](LICENSE) file in the repository root.

@@ -1,8 +1,0 @@
-{
-  "id": "feature_fix-security-audit-findings_20260901_ac8a",
-  "type": "feature",
-  "status": "in_progress",
-  "created_at": "2026-09-01T10:21:58.420Z",
-  "updated_at": "2026-09-01T10:32:10.856Z",
-  "description": "Implement and fix the six security audit findings (git:// transport, ignored runtime resources, global secret filter, control API resource exhaustion, unpinned GitHub Actions, insecure docs)."
-}

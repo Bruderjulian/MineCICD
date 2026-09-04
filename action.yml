@@ -1,0 +1,488 @@
+# MineCICD GitHub Action — lemonlightmc/minecicd
+# Composite action for triggering deploys via the MineCICD Control API.
+#
+# Supports: pull, push, restart, reload, command, script
+# Auth:     HMAC-SHA256 (timestamp|nonce|requestId|sha256(body))
+# Streaming: SSE live progress + status polling fallback
+
+name: "MineCICD Deploy"
+description: "Trigger a MineCICD deploy via the Control API with HMAC-SHA256 authentication and live progress streaming."
+
+branding:
+  icon: "server"
+  color: "green"
+
+inputs:
+  server-url:
+    description: "MineCICD Control API base URL (e.g. http://your-server:8080/minecicd)"
+    required: true
+  secret:
+    description: "HMAC-SHA256 shared secret for Control API authentication"
+    required: true
+  actions:
+    description: "Comma-separated actions: pull, push, push:message, restart, reload, reload:plugin, command:cmd, script:name"
+    required: true
+  branch:
+    description: "Target git branch (optional — server uses its configured default if omitted)"
+    required: false
+    default: ""
+  path:
+    description: "API path on the server (appended to server-url if server-url doesn't already include it)"
+    required: false
+    default: "minecicd"
+  timeout:
+    description: "Max seconds to wait for deployment completion (SSE stream + status polling)"
+    required: false
+    default: "600"
+  tls-verify:
+    description: "Verify TLS certificates (set to false for self-signed certs)"
+    required: false
+    default: "true"
+
+outputs:
+  status:
+    description: "Terminal status: completed, failed, or timeout"
+    value: ${{ steps.outputs.outputs.status }}
+  request-id:
+    description: "The requestId used for this deployment"
+    value: ${{ steps.outputs.outputs.request-id }}
+  error:
+    description: "Error message if the deployment failed (empty on success)"
+    value: ${{ steps.outputs.outputs.error }}
+  completed:
+    description: "Number of actions completed"
+    value: ${{ steps.outputs.outputs.completed }}
+  total:
+    description: "Total number of actions requested"
+    value: ${{ steps.outputs.outputs.total }}
+
+runs:
+  using: "composite"
+  steps:
+    # ── Step 1: Authenticate and submit request ──────────────────────────
+    - name: Authenticate and submit request
+      id: submit
+      shell: bash
+      env:
+        MC_SERVER_URL: ${{ inputs.server-url }}
+        MC_SECRET: ${{ inputs.secret }}
+        MC_ACTIONS: ${{ inputs.actions }}
+        MC_BRANCH: ${{ inputs.branch }}
+        MC_PATH: ${{ inputs.path }}
+        MC_TLS_VERIFY: ${{ inputs.tls-verify }}
+      run: |
+        set -euo pipefail
+
+        # ── Input validation ────────────────────────────────────────────
+        if [[ -z "${MC_SERVER_URL}" ]]; then
+          echo "::error::server-url is required"
+          exit 1
+        fi
+        if [[ -z "${MC_SECRET}" ]]; then
+          echo "::error::secret is required"
+          exit 1
+        fi
+        if [[ -z "${MC_ACTIONS}" ]]; then
+          echo "::error::actions is required"
+          exit 1
+        fi
+
+        # ── Generate cryptographic values ───────────────────────────────
+        REQUEST_ID="$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen 2>/dev/null || openssl rand -hex 16)"
+        NONCE="$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen 2>/dev/null || openssl rand -hex 16)"
+        TIMESTAMP="$(date +%s)"
+
+        echo "Generated requestId=${REQUEST_ID}"
+
+        # ── Build action list JSON array ────────────────────────────────
+        ACTIONS_JSON="["
+        IFS=',' read -ra ACTION_ARRAY <<< "${MC_ACTIONS}"
+        for i in "${!ACTION_ARRAY[@]}"; do
+          ACTION="$(echo "${ACTION_ARRAY[$i]}" | xargs)"  # trim whitespace
+          if [[ -z "${ACTION}" ]]; then
+            continue
+          fi
+          if [[ ${i} -gt 0 ]]; then
+            ACTIONS_JSON+=","
+          fi
+          ACTIONS_JSON+="\"${ACTION}\""
+        done
+        ACTIONS_JSON+="]"
+        echo "Actions: ${ACTIONS_JSON}"
+
+        # ── Build request body ──────────────────────────────────────────
+        BODY="{\"requestId\":\"${REQUEST_ID}\""
+        if [[ -n "${MC_BRANCH}" ]]; then
+          BODY+=",\"branch\":\"${MC_BRANCH}\""
+        fi
+        BODY+=",\"actions\":${ACTIONS_JSON}}"
+        BODY_SHA256="$(printf '%s' "${BODY}" | sha256sum | awk '{print $1}')"
+
+        # ── Compute HMAC-SHA256 signature ───────────────────────────────
+        CANONICAL="${TIMESTAMP}|${NONCE}|${REQUEST_ID}|${BODY_SHA256}"
+        SIGNATURE="$(printf '%s' "${CANONICAL}" | openssl dgst -sha256 -hmac "${MC_SECRET}" | sed 's/^.* //')"
+
+        echo "HMAC-SHA256 signature computed"
+        echo "  Timestamp : ${TIMESTAMP}"
+        echo "  Nonce     : ${NONCE}"
+        echo "  Body SHA256: ${BODY_SHA256}"
+
+        # ── Build endpoint URL ──────────────────────────────────────────
+        ENDPOINT="${MC_SERVER_URL}"
+        if [[ "${ENDPOINT}" != *"/${MC_PATH}" ]]; then
+          ENDPOINT="${ENDPOINT%/}/${MC_PATH}"
+        fi
+
+        # ── TLS options ─────────────────────────────────────────────────
+        TLS_OPTS=""
+        if [[ "${MC_TLS_VERIFY}" == "false" ]]; then
+          TLS_OPTS="-k"
+          echo "::notice::TLS certificate verification is disabled"
+        fi
+
+        echo "Endpoint: ${ENDPOINT}"
+        echo "Sending request..."
+
+        # ── POST to Control API ─────────────────────────────────────────
+        HTTP_STATUS=$(curl -s -o /tmp/mc_response.json -w "%{http_code}" \
+          ${TLS_OPTS} \
+          -X POST \
+          -H "Content-Type: application/json" \
+          -H "X-MineCICD-Timestamp: ${TIMESTAMP}" \
+          -H "X-MineCICD-Nonce: ${NONCE}" \
+          -H "X-MineCICD-Signature: ${SIGNATURE}" \
+          -d "${BODY}" \
+          "${ENDPOINT}")
+
+        RESPONSE=$(cat /tmp/mc_response.json)
+
+        echo "HTTP ${HTTP_STATUS}"
+        echo "Response: ${RESPONSE}"
+
+        # ── Handle response ─────────────────────────────────────────────
+        if [[ "${HTTP_STATUS}" == "409" ]]; then
+          echo "::error::Another deployment is already in progress (409 Conflict)"
+          echo "DEPLOY_FAILED=true" >> "$GITHUB_ENV"
+          echo "DEPLOY_ERROR=Another deployment is already in flight" >> "$GITHUB_ENV"
+          exit 1
+        elif [[ "${HTTP_STATUS}" == "401" ]]; then
+          echo "::error::Authentication failed (401 Unauthorized) — check your HMAC secret"
+          echo "DEPLOY_FAILED=true" >> "$GITHUB_ENV"
+          echo "DEPLOY_ERROR=Authentication failed (401)" >> "$GITHUB_ENV"
+          exit 1
+        elif [[ "${HTTP_STATUS}" == "403" ]]; then
+          MSG=$(printf '%s' "${RESPONSE}" | tr -d '\n' | sed 's/"/\\"/g')
+          echo "::error::Action not authorized (403 Forbidden): ${MSG}"
+          echo "DEPLOY_FAILED=true" >> "$GITHUB_ENV"
+          echo "DEPLOY_ERROR=Action not authorized (403): ${MSG}" >> "$GITHUB_ENV"
+          exit 1
+        elif [[ "${HTTP_STATUS}" -ge 400 ]]; then
+          MSG=$(printf '%s' "${RESPONSE}" | tr -d '\n' | sed 's/"/\\"/g')
+          echo "::error::Request rejected (HTTP ${HTTP_STATUS}): ${MSG}"
+          echo "DEPLOY_FAILED=true" >> "$GITHUB_ENV"
+          echo "DEPLOY_ERROR=Request rejected (HTTP ${HTTP_STATUS}): ${MSG}" >> "$GITHUB_ENV"
+          exit 1
+        elif [[ "${HTTP_STATUS}" != "202" ]]; then
+          echo "::error::Unexpected response: HTTP ${HTTP_STATUS}"
+          echo "DEPLOY_FAILED=true" >> "$GITHUB_ENV"
+          echo "DEPLOY_ERROR=Unexpected HTTP ${HTTP_STATUS}" >> "$GITHUB_ENV"
+          exit 1
+        fi
+
+        echo "Request accepted (202)"
+        echo "REQUEST_ID=${REQUEST_ID}" >> "$GITHUB_ENV"
+        echo "SUBMIT_TIME=${TIMESTAMP}" >> "$GITHUB_ENV"
+        echo "ENDPOINT=${ENDPOINT}" >> "$GITHUB_ENV"
+
+    # ── Step 2: SSE live progress streaming ──────────────────────────────
+    - name: Stream live progress
+      id: sse
+      if: always() && steps.submit.outcome == 'success'
+      shell: bash
+      env:
+        MC_SECRET: ${{ inputs.secret }}
+        MC_TLS_VERIFY: ${{ inputs.tls-verify }}
+        MC_TIMEOUT: ${{ inputs.timeout }}
+      run: |
+        set -uo pipefail
+
+        ENDPOINT="${ENDPOINT}"
+        REQUEST_ID="${REQUEST_ID}"
+        TIMEOUT="${MC_TIMEOUT}"
+
+        TLS_OPTS=""
+        if [[ "${MC_TLS_VERIFY}" == "false" ]]; then
+          TLS_OPTS="-k"
+        fi
+
+        STREAM_URL="${ENDPOINT}/stream?requestId=${REQUEST_ID}"
+        echo "Connecting to SSE stream: ${STREAM_URL}"
+
+        # Track timing and results
+        START_TIME=$(date +%s)
+        LAST_STATUS=""
+        FAILED=false
+        COMPLETED_COUNT=0
+
+        # Clean up any previous results
+        rm -f /tmp/mc_results.txt
+
+        # ── Compute HMAC for SSE stream connection ─────────────────────
+        SSE_BODY='{}'
+        SSE_BODY_SHA256="$(printf '%s' "${SSE_BODY}" | sha256sum | awk '{print $1}')"
+        SSE_TS="$(date +%s)"
+        SSE_NC="$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen 2>/dev/null || openssl rand -hex 16)"
+        SSE_CANON="${SSE_TS}|${SSE_NC}|${REQUEST_ID}|${SSE_BODY_SHA256}"
+        SSE_SIG="$(printf '%s' "${SSE_CANON}" | openssl dgst -sha256 -hmac "${MC_SECRET}" | sed 's/^.* //')"
+
+        # Use a named pipe for real-time SSE processing
+        PIPE="/tmp/mc_sse_pipe_$$"
+        mkfifo "${PIPE}" 2>/dev/null || true
+
+        # Start curl SSE stream in background — unbuffered, captures data lines
+        curl -s -N --max-time "${TIMEOUT}" \
+          ${TLS_OPTS} \
+          -X POST \
+          -H "Content-Type: application/json" \
+          -H "X-MineCICD-Timestamp: ${SSE_TS}" \
+          -H "X-MineCICD-Nonce: ${SSE_NC}" \
+          -H "X-MineCICD-Signature: ${SSE_SIG}" \
+          -d "${SSE_BODY}" \
+          "${STREAM_URL}" 2>/dev/null \
+          | grep '^data: ' | sed 's/^data: //' > "${PIPE}" &
+        CURL_PID=$!
+
+        echo "SSE stream connected (PID: ${CURL_PID})"
+        echo "::group::Live progress"
+
+        # Process SSE events in real time from the named pipe
+        while IFS= read -r line; do
+          [[ -z "${line}" ]] && continue
+
+          if [[ "${line}" == "completed" ]]; then
+            echo ""
+            echo "Deployment completed successfully"
+            LAST_STATUS="completed"
+            break
+          elif [[ "${line}" == failed:* ]]; then
+            ERROR_MSG="${line#failed:}"
+            echo ""
+            echo "::error::Deployment failed: ${ERROR_MSG}"
+            LAST_STATUS="failed"
+            FAILED=true
+            break
+          else
+            # Action progress line
+            COMPLETED_COUNT=$((COMPLETED_COUNT + 1))
+            echo "  [${COMPLETED_COUNT}] ${line}"
+          fi
+        done < "${PIPE}"
+
+        echo "::endgroup::"
+
+        # Clean up pipe
+        rm -f "${PIPE}"
+
+        # If curl is still running after the pipe closed, wait briefly for it
+        if kill -0 "${CURL_PID}" 2>/dev/null; then
+          # Check timeout before waiting
+          NOW=$(date +%s)
+          ELAPSED=$((NOW - START_TIME))
+          if [[ ${ELAPSED} -ge ${TIMEOUT} ]]; then
+            echo "::warning::Timeout reached after ${TIMEOUT}s"
+            LAST_STATUS="timeout"
+          fi
+          kill "${CURL_PID}" 2>/dev/null || true
+          wait "${CURL_PID}" 2>/dev/null || true
+        fi
+
+        # If we got here without a terminal status, the stream ended unexpectedly
+        if [[ -z "${LAST_STATUS}" ]]; then
+          echo "::warning::SSE stream ended without terminal status — will poll"
+          LAST_STATUS="polling"
+        fi
+
+        # Save results for the next step
+        echo "LAST_STATUS=${LAST_STATUS}" >> "$GITHUB_ENV"
+        echo "FAILED=${FAILED}" >> "$GITHUB_ENV"
+        echo "COMPLETED_COUNT=${COMPLETED_COUNT}" >> "$GITHUB_ENV"
+
+    # ── Step 3: Status polling fallback ──────────────────────────────────
+    - name: Poll deployment status
+      id: status
+      if: always() && steps.submit.outcome == 'success' && env.LAST_STATUS != 'completed' && env.LAST_STATUS != 'failed'
+      shell: bash
+      env:
+        MC_SECRET: ${{ inputs.secret }}
+        MC_TLS_VERIFY: ${{ inputs.tls-verify }}
+        MC_TIMEOUT: ${{ inputs.timeout }}
+      run: |
+        set -uo pipefail
+
+        ENDPOINT="${ENDPOINT}"
+        REQUEST_ID="${REQUEST_ID}"
+        TIMEOUT="${MC_TIMEOUT}"
+        START_TIME="${SUBMIT_TIME}"
+
+        TLS_OPTS=""
+        if [[ "${MC_TLS_VERIFY}" == "false" ]]; then
+          TLS_OPTS="-k"
+        fi
+
+        STATUS_URL="${ENDPOINT}/status?requestId=${REQUEST_ID}"
+        echo "Polling status: ${STATUS_URL}"
+
+        POLL_INTERVAL=5
+        MAX_POLLS=$((TIMEOUT / POLL_INTERVAL))
+
+        for ((i=1; i<=MAX_POLLS; i++)); do
+          # Check overall timeout
+          NOW=$(date +%s)
+          ELAPSED=$((NOW - START_TIME))
+          if [[ ${ELAPSED} -ge ${TIMEOUT} ]]; then
+            echo "::warning::Status poll timeout after ${TIMEOUT}s"
+            echo "status=timeout" > /tmp/mc_results.txt
+            break
+          fi
+
+          sleep "${POLL_INTERVAL}"
+
+          # ── Compute HMAC for status poll ──────────────────────────────
+          # Server reads body for MAC verification even on GET
+          POLL_BODY='{}'
+          POLL_BODY_SHA256="$(printf '%s' "${POLL_BODY}" | sha256sum | awk '{print $1}')"
+          POLL_TS="$(date +%s)"
+          POLL_NC="$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen 2>/dev/null || openssl rand -hex 16)"
+          POLL_CANON="${POLL_TS}|${POLL_NC}|${REQUEST_ID}|${POLL_BODY_SHA256}"
+          POLL_SIG="$(printf '%s' "${POLL_CANON}" | openssl dgst -sha256 -hmac "${MC_SECRET}" | sed 's/^.* //')"
+
+          HTTP_CODE=$(curl -s -o /tmp/mc_poll.json -w "%{http_code}" \
+            ${TLS_OPTS} \
+            -X GET \
+            -H "Content-Type: application/json" \
+            -H "X-MineCICD-Timestamp: ${POLL_TS}" \
+            -H "X-MineCICD-Nonce: ${POLL_NC}" \
+            -H "X-MineCICD-Signature: ${POLL_SIG}" \
+            -d "${POLL_BODY}" \
+            "${STATUS_URL}")
+
+          if [[ "${HTTP_CODE}" == "200" ]]; then
+            # Parse JSON response
+            RESP="$(cat /tmp/mc_poll.json)"
+            STATUS=$(printf '%s' "${RESP}" | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+            COMPLETED=$(printf '%s' "${RESP}" | grep -o '"completed":[0-9]*' | cut -d: -f2)
+            TOTAL=$(printf '%s' "${RESP}" | grep -o '"total":[0-9]*' | cut -d: -f2)
+            ERROR=$(printf '%s' "${RESP}" | grep -o '"error":"[^"]*"' | cut -d'"' -f4)
+
+            echo "Status: ${STATUS} (${COMPLETED:-0}/${TOTAL:-0})"
+
+            if [[ "${STATUS}" == "COMPLETED" ]]; then
+              echo "::notice::Deployment completed (${COMPLETED}/${TOTAL})"
+              {
+                echo "status=completed"
+                echo "completed=${COMPLETED}"
+                echo "total=${TOTAL}"
+              } > /tmp/mc_results.txt
+              break
+            elif [[ "${STATUS}" == "FAILED" ]]; then
+              echo "::error::Deployment failed: ${ERROR}"
+              {
+                echo "status=failed"
+                echo "error=${ERROR}"
+                echo "completed=${COMPLETED}"
+                echo "total=${TOTAL}"
+              } > /tmp/mc_results.txt
+              break
+            fi
+            # RUNNING — continue polling
+          elif [[ "${HTTP_CODE}" == "404" ]]; then
+            echo "Request not yet registered (404), retrying..."
+          elif [[ "${HTTP_CODE}" == "401" ]]; then
+            echo "::error::Status poll auth failed (401)"
+            echo "status=auth_failed" > /tmp/mc_results.txt
+            break
+          else
+            echo "::warning::Status poll returned HTTP ${HTTP_CODE}"
+          fi
+        done
+
+        # Ensure results file exists
+        if [[ ! -f /tmp/mc_results.txt ]]; then
+          echo "status=timeout" > /tmp/mc_results.txt
+        fi
+
+    # ── Step 4: Set outputs (always runs) ────────────────────────────────
+    - name: Set outputs
+      id: outputs
+      if: always()
+      shell: bash
+      run: |
+        set -uo pipefail
+
+        # Read results from the results file (status step) or env vars (sse step)
+        RESULT_STATUS=""
+        RESULT_ERROR=""
+        RESULT_COMPLETED=""
+        RESULT_TOTAL=""
+
+        if [[ -f /tmp/mc_results.txt ]]; then
+          while IFS='=' read -r key value; do
+            case "${key}" in
+              status)   RESULT_STATUS="${value}" ;;
+              error)    RESULT_ERROR="${value}" ;;
+              completed) RESULT_COMPLETED="${value}" ;;
+              total)    RESULT_TOTAL="${value}" ;;
+            esac
+          done < /tmp/mc_results.txt
+        fi
+
+        # Fallback to SSE-tracked values if available
+        if [[ -z "${RESULT_STATUS}" && -n "${LAST_STATUS:-}" ]]; then
+          RESULT_STATUS="${LAST_STATUS}"
+        fi
+        if [[ -z "${RESULT_COMPLETED}" && -n "${COMPLETED_COUNT:-}" ]]; then
+          RESULT_COMPLETED="${COMPLETED_COUNT}"
+        fi
+        if [[ -z "${RESULT_ERROR}" && -n "${DEPLOY_ERROR:-}" ]]; then
+          RESULT_ERROR="${DEPLOY_ERROR}"
+        fi
+
+        # Default status if nothing was set
+        if [[ -z "${RESULT_STATUS}" ]]; then
+          if [[ "${DEPLOY_FAILED:-}" == "true" ]]; then
+            RESULT_STATUS="failed"
+          else
+            RESULT_STATUS="unknown"
+          fi
+        fi
+
+        # Set all outputs
+        {
+          echo "status=${RESULT_STATUS}"
+          echo "request-id=${REQUEST_ID:-}"
+          echo "error=${RESULT_ERROR}"
+          echo "completed=${RESULT_COMPLETED}"
+          echo "total=${RESULT_TOTAL}"
+        } >> "$GITHUB_OUTPUT"
+
+        # ── Final summary ───────────────────────────────────────────────
+        echo ""
+        echo "════════════════════════════════════════"
+        echo "  MineCICD Deployment Summary"
+        echo "════════════════════════════════════════"
+        echo "  Request ID : ${REQUEST_ID:-N/A}"
+        echo "  Status     : ${RESULT_STATUS}"
+        if [[ -n "${RESULT_COMPLETED}" && -n "${RESULT_TOTAL}" ]]; then
+          echo "  Progress   : ${RESULT_COMPLETED}/${RESULT_TOTAL}"
+        fi
+        if [[ -n "${RESULT_ERROR}" ]]; then
+          echo "  Error      : ${RESULT_ERROR}"
+        fi
+        echo "════════════════════════════════════════"
+
+        # Exit with failure if deployment failed or timed out
+        case "${RESULT_STATUS}" in
+          failed|timeout|auth_failed|unknown)
+            exit 1
+            ;;
+        esac

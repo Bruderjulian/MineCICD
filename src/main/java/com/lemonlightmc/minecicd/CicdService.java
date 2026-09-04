@@ -448,19 +448,11 @@ public class CicdService implements ControlServer.Delegate {
                 Bukkit.spigot().restart();
             }
         };
-        if (Bukkit.isPrimaryThread()) {
-            restart.run();
-        } else {
-            plugin.getServer().getScheduler().runTask(plugin, restart);
-        }
+        Threads.marshaled(plugin, restart);
     }
 
     private void reloadAllPluginsIncludingPlugin() {
-        if (Bukkit.isPrimaryThread()) {
-            plugin.getServer().reload();
-        } else {
-            plugin.getServer().getScheduler().runTask(plugin, () -> plugin.getServer().reload());
-        }
+        Threads.marshaled(plugin, () -> plugin.getServer().reload());
     }
 
     private void reloadPluginByName(String name) {
@@ -471,20 +463,11 @@ public class CicdService implements ControlServer.Delegate {
                 Bukkit.getPluginManager().enablePlugin(target);
             }
         };
-        if (Bukkit.isPrimaryThread()) {
-            reload.run();
-        } else {
-            plugin.getServer().getScheduler().runTask(plugin, reload);
-        }
+        Threads.marshaled(plugin, reload);
     }
 
     private void dispatchConsole(String command) {
-        Runnable run = () -> Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), command);
-        if (Bukkit.isPrimaryThread()) {
-            run.run();
-        } else {
-            plugin.getServer().getScheduler().runTask(plugin, run);
-        }
+        Threads.marshaled(plugin, () -> plugin.getServer().dispatchCommand(Bukkit.getConsoleSender(), command));
     }
 
     // ----------------------------------------------------------------- resume

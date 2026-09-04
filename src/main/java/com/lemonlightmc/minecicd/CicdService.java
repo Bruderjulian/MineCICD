@@ -1,6 +1,7 @@
 package com.lemonlightmc.minecicd;
 
 import com.lemonlightmc.minecicd.bossbar.BossBars;
+import com.lemonlightmc.minecicd.exceptions.ScriptException;
 import com.lemonlightmc.minecicd.git.CommitActions;
 import com.lemonlightmc.minecicd.git.CommitActions.Action;
 import com.lemonlightmc.minecicd.git.CommitActions.ActionType;
@@ -16,7 +17,7 @@ import com.lemonlightmc.minecicd.messaging.Msg;
 import com.lemonlightmc.minecicd.pending.PendingRequest;
 import com.lemonlightmc.minecicd.pending.PendingRequest.Status;
 import com.lemonlightmc.minecicd.pending.PendingStore;
-import com.lemonlightmc.minecicd.scripts.ScriptRunner;
+import com.lemonlightmc.minecicd.scripts.ScriptManager;
 import com.lemonlightmc.minecicd.util.Threads;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
@@ -25,6 +26,8 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Scanner;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -40,7 +43,7 @@ public class CicdService implements ControlServer.Delegate {
     private final MineCICD plugin;
     private final MineCICDConfig config;
     private final GitService git;
-    private final ScriptRunner scriptRunner;
+    private final ScriptManager scriptManager;
     private final BossBars bossBar;
     private final Messages messages;
     private final Msg msg;
@@ -53,12 +56,12 @@ public class CicdService implements ControlServer.Delegate {
     private final AtomicReference<String> inFlight = new AtomicReference<>(null);
 
     public CicdService(MineCICD plugin, MineCICDConfig config, GitService git,
-                       ScriptRunner scriptRunner, BossBars bossBar, Messages messages,
-                       Msg msg, PendingStore pendingStore) {
+            ScriptManager scriptManager, BossBars bossBar, Messages messages,
+            Msg msg, PendingStore pendingStore) {
         this.plugin = plugin;
         this.config = config;
         this.git = git;
-        this.scriptRunner = scriptRunner;
+        this.scriptManager = scriptManager;
         this.bossBar = bossBar;
         this.messages = messages;
         this.msg = msg;
@@ -117,7 +120,8 @@ public class CicdService implements ControlServer.Delegate {
                 try {
                     policy.validateActions(List.of(action));
                 } catch (ControlSecurity.RejectException e) {
-                    plugin.getLogger().warning("Skipping commit action disallowed by policy: " + action + " (" + e.getMessage() + ")");
+                    plugin.getLogger().warning(
+                            "Skipping commit action disallowed by policy: " + action + " (" + e.getMessage() + ")");
                     continue;
                 }
                 plugin.getLogger().info("Running commit action: " + action);
@@ -257,11 +261,12 @@ public class CicdService implements ControlServer.Delegate {
         return enqueue(() -> {
             try {
                 bossBar.show("script", Map.of());
-                int lines = scriptRunner.run(name, sender, line -> {});
+                scriptManager.run(name, sender, line -> {
+                });
                 msg.send(sender, "script-success");
                 bossBar.show("script-success", Map.of());
                 return Boolean.TRUE;
-            } catch (ScriptRunner.ScriptException e) {
+            } catch (ScriptException e) {
                 msg.send(sender, "script-failed", Map.of("error", e.getMessage()));
                 bossBar.show("script-failed", Map.of());
                 return Boolean.FALSE;
@@ -444,7 +449,8 @@ public class CicdService implements ControlServer.Delegate {
             }
             case SCRIPT -> {
                 try {
-                    scriptRunner.run(action.argument(), null, line -> {});
+                    scriptManager.run(action.argument(), null, line -> {
+                    });
                     return true;
                 } catch (Exception e) {
                     return false;
@@ -536,8 +542,8 @@ public class CicdService implements ControlServer.Delegate {
         return git.isInitialized();
     }
 
-    public List<String> scriptNames() {
-        return scriptRunner.listScripts();
+    public Set<String> scriptNames() {
+        return scriptManager.listScripts();
     }
 
     public boolean controlActive() {

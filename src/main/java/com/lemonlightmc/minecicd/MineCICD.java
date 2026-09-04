@@ -2,7 +2,6 @@ package com.lemonlightmc.minecicd;
 
 import com.lemonlightmc.minecicd.bossbar.BossBars;
 import com.lemonlightmc.minecicd.command.MineCICDCommand;
-import com.lemonlightmc.minecicd.git.CommitActions;
 import com.lemonlightmc.minecicd.git.CommitActions.ActionType;
 import com.lemonlightmc.minecicd.git.GitService;
 import com.lemonlightmc.minecicd.http.ControlSecurity;
@@ -11,7 +10,7 @@ import com.lemonlightmc.minecicd.http.ControlTls;
 import com.lemonlightmc.minecicd.messaging.Messages;
 import com.lemonlightmc.minecicd.messaging.Msg;
 import com.lemonlightmc.minecicd.pending.PendingStore;
-import com.lemonlightmc.minecicd.scripts.ScriptRunner;
+import com.lemonlightmc.minecicd.scripts.ScriptManager;
 import com.lemonlightmc.minecicd.secrets.SecretManager;
 import com.destroystokyo.paper.event.server.ServerTickStartEvent;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
@@ -19,7 +18,6 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 import java.nio.file.Path;
-import java.util.List;
 
 public final class MineCICD extends JavaPlugin {
 
@@ -28,7 +26,7 @@ public final class MineCICD extends JavaPlugin {
     private Msg msg;
     private BossBars bossBars;
     private GitService gitService;
-    private ScriptRunner scriptRunner;
+    private ScriptManager scriptManager;
     private SecretManager secretManager;
     private PendingStore pendingStore;
     private CicdService cicdService;
@@ -50,10 +48,11 @@ public final class MineCICD extends JavaPlugin {
         this.msg = new Msg(this, messages);
         this.bossBars = new BossBars(this, messages, config.bossBar().enabled(), config.bossBar().durationTicks());
         this.gitService = new GitService(root, () -> config);
-        this.scriptRunner = new ScriptRunner(this);
+        this.scriptManager = new ScriptManager(this);
         this.secretManager = new SecretManager(this);
         this.pendingStore = new PendingStore(getDataFolder().toPath());
-        this.cicdService = new CicdService(this, config, gitService, scriptRunner, bossBars, messages, msg, pendingStore);
+        this.cicdService = new CicdService(this, config, gitService, 
+                scriptManager, bossBars, messages, msg, pendingStore);
 
         secretManager.load();
 
@@ -72,7 +71,7 @@ public final class MineCICD extends JavaPlugin {
             }
         }, this);
 
-        getLogger().info("MineCICD " + getDescription().getVersion() + " enabled.");
+        getLogger().info("MineCICD " + getPluginMeta().getVersion() + " enabled.");
     }
 
     @Override
@@ -152,13 +151,6 @@ public final class MineCICD extends JavaPlugin {
         File example = new File(scriptsDir, "example_script.sh");
         if (!example.exists() && getResource("example_script.sh") != null) {
             saveResource("example_script.sh", false);
-            try {
-                java.nio.file.Files.move(example.toPath(),
-                        scriptsDir.toPath().resolve("example_script.sh"),
-                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-            } catch (Exception e) {
-                getLogger().warning("Unable to move example script: " + e.getMessage());
-            }
         }
     }
 

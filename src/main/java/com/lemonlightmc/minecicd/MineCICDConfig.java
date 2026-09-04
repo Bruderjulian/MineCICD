@@ -7,13 +7,20 @@ import java.io.File;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.attribute.PosixFilePermission;
+
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Typed, immutable view of config.yml. The plugin loads/patches the raw YAML on
- * {@link #load()} (migrating old {@code webhooks:*} keys, backfilling missing keys,
- * and bumping supported defaults) and then exposes records to the rest of the system.
+ * {@link #load()} (migrating old {@code webhooks:*} keys, backfilling missing
+ * keys,
+ * and bumping supported defaults) and then exposes records to the rest of the
+ * system.
  */
 public class MineCICDConfig {
 
@@ -33,8 +40,8 @@ public class MineCICDConfig {
     }
 
     public record Control(String host, int port, String path, String secret, Tls tls,
-                          String pushMessage, List<String> branches, long maxBodyBytes,
-                          long replayWindowSeconds, Actions actions) {
+            String pushMessage, List<String> branches, long maxBodyBytes,
+            long replayWindowSeconds, Actions actions) {
     }
 
     private final MineCICD plugin;
@@ -57,7 +64,8 @@ public class MineCICDConfig {
         config = YamlConfiguration.loadConfiguration(file);
         try (InputStream in = plugin.getResource("config.yml")) {
             if (in != null) {
-                YamlConfiguration defaults = YamlConfiguration.loadConfiguration(new InputStreamReader(in, StandardCharsets.UTF_8));
+                YamlConfiguration defaults = YamlConfiguration
+                        .loadConfiguration(new InputStreamReader(in, StandardCharsets.UTF_8));
                 patchConfig(file, defaults);
                 config = YamlConfiguration.loadConfiguration(file);
             }
@@ -76,7 +84,8 @@ public class MineCICDConfig {
 
     private void patchConfig(File file, YamlConfiguration defaults) {
         boolean changed = false;
-        // migrate old webhooks:* keys to control:* (if control block is absent) then drop webhooks
+        // migrate old webhooks:* keys to control:* (if control block is absent) then
+        // drop webhooks
         if (config.contains("webhooks")) {
             ConfigurationSection webhooks = config.getConfigurationSection("webhooks");
             if (webhooks != null) {
@@ -118,10 +127,10 @@ public class MineCICDConfig {
 
     private static void hardenPermissions(java.nio.file.Path file) {
         try {
-            java.util.Set<java.nio.file.attribute.PosixFilePermission> set = java.util.EnumSet.noneOf(java.nio.file.attribute.PosixFilePermission.class);
-            set.add(java.nio.file.attribute.PosixFilePermission.OWNER_READ);
-            set.add(java.nio.file.attribute.PosixFilePermission.OWNER_WRITE);
-            java.nio.file.Files.setPosixFilePermissions(file, set);
+            Set<PosixFilePermission> set = EnumSet.noneOf(PosixFilePermission.class);
+            set.add(PosixFilePermission.OWNER_READ);
+            set.add(PosixFilePermission.OWNER_WRITE);
+            Files.setPosixFilePermissions(file, set);
         } catch (UnsupportedOperationException | java.io.IOException ignored) {
             try {
                 java.io.File f = file.toFile();
@@ -130,45 +139,47 @@ public class MineCICDConfig {
                 f.setExecutable(false, false);
                 f.setReadable(true, true);
                 f.setWritable(true, true);
-            } catch (Exception ignored2) {}
+            } catch (Exception ignored2) {
+            }
         }
     }
 
     private void warnIfWorldReadable(java.nio.file.Path file) {
         try {
-            java.util.Set<java.nio.file.attribute.PosixFilePermission> perms = java.nio.file.Files.getPosixFilePermissions(file);
-            if (perms.contains(java.nio.file.attribute.PosixFilePermission.OTHERS_READ) || perms.contains(java.nio.file.attribute.PosixFilePermission.GROUP_READ)) {
+            Set<PosixFilePermission> perms = Files.getPosixFilePermissions(file);
+            if (perms.contains(PosixFilePermission.OTHERS_READ) || perms.contains(PosixFilePermission.GROUP_READ)) {
                 plugin.getLogger().warning(file.getFileName() + " is world-readable; run chmod 600 " + file);
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
     }
 
     private void readRecords() {
-        ConfigurationSection g = config.getConfigurationSection("git");
+        ConfigurationSection gitSection = config.getConfigurationSection("git");
         this.git = new Git(
-                g.getString("user", ""),
-                g.getString("pass", ""),
-                g.getString("repo", ""),
-                g.getString("email", "minecicd@minecicd.local"),
-                g.getString("branch", "master"));
+                gitSection.getString("user", ""),
+                gitSection.getString("pass", ""),
+                gitSection.getString("repo", ""),
+                gitSection.getString("email", "minecicd@minecicd.local"),
+                gitSection.getString("branch", "master"));
 
-        ConfigurationSection b = config.getConfigurationSection("bossbar");
-        this.bossBar = new BossBar(b.getBoolean("enabled", true), b.getInt("duration", 100));
+        ConfigurationSection barSection = config.getConfigurationSection("bossbar");
+        this.bossBar = new BossBar(barSection.getBoolean("enabled", true), barSection.getInt("duration", 100));
         this.experimentalJarLoading = config.getBoolean("experimental-jar-loading", false);
 
-        ConfigurationSection c = config.getConfigurationSection("control");
-        ConfigurationSection tls = c.getConfigurationSection("tls");
-        ConfigurationSection act = c.getConfigurationSection("actions");
+        ConfigurationSection controlSection = config.getConfigurationSection("control");
+        ConfigurationSection tls = controlSection.getConfigurationSection("tls");
+        ConfigurationSection act = controlSection.getConfigurationSection("actions");
         this.control = new Control(
-                c.getString("host", "127.0.0.1"),
-                c.getInt("port", 0),
-                c.getString("path", "minecicd"),
-                c.getString("secret", ""),
+                controlSection.getString("host", "127.0.0.1"),
+                controlSection.getInt("port", 0),
+                controlSection.getString("path", "minecicd"),
+                controlSection.getString("secret", ""),
                 new Tls(tls.getBoolean("enabled", false), tls.getString("keystore", ""), tls.getString("password", "")),
-                c.getString("push-message", "Auto-commit by MineCICD"),
-                new ArrayList<>(c.getStringList("branches")),
-                c.getLong("max-body-bytes", 65536),
-                c.getLong("replay-window-seconds", 300),
+                controlSection.getString("push-message", "Auto-commit by MineCICD"),
+                new ArrayList<>(controlSection.getStringList("branches")),
+                controlSection.getLong("max-body-bytes", 65536),
+                controlSection.getLong("replay-window-seconds", 300),
                 new Actions(
                         act.getBoolean("pull", true),
                         act.getBoolean("push", true),
@@ -176,9 +187,9 @@ public class MineCICDConfig {
                         act.getBoolean("global-reload", false),
                         act.getBoolean("reload-plugins", true),
                         act.getBoolean("commands.enabled", false),
-                        new ArrayList<>(act.getStringList("commands.allow")),
+                        act.getStringList("commands.allow"),
                         act.getBoolean("scripts.enabled", false),
-                        new ArrayList<>(act.getStringList("scripts.allow"))));
+                       act.getStringList("scripts.allow")));
     }
 
     public Git git() {

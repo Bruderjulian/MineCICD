@@ -1,6 +1,5 @@
 package com.lemonlightmc.minecicd.pending;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.IOException;

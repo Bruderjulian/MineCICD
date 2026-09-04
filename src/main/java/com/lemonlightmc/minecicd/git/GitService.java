@@ -1,14 +1,12 @@
 package com.lemonlightmc.minecicd.git;
 
-import com.lemonlightmc.minecicd.MineCICDConfig;
+import com.lemonlightmc.minecicd.MineCICD;
 import com.lemonlightmc.minecicd.git.Results.LogEntry;
 import com.lemonlightmc.minecicd.git.Results.LogPage;
 import com.lemonlightmc.minecicd.git.Results.PullResult;
 import com.lemonlightmc.minecicd.git.Results.PushResult;
 import com.lemonlightmc.minecicd.git.Results.StatusInfo;
 import org.eclipse.jgit.api.Git;
-import org.eclipse.jgit.api.ListBranchCommand;
-import org.eclipse.jgit.api.MergeResult;
 import org.eclipse.jgit.api.ResetCommand.ResetType;
 import org.eclipse.jgit.api.Status;
 import org.eclipse.jgit.api.errors.GitAPIException;
@@ -30,7 +28,6 @@ import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 import org.eclipse.jgit.treewalk.CanonicalTreeParser;
 import org.eclipse.jgit.treewalk.TreeWalk;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -42,7 +39,6 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.TreeSet;
-import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -51,22 +47,16 @@ public class GitService {
     private static final int PAGE_SIZE = 5;
     private static final Pattern COMMIT_FROM_URL = Pattern.compile("[0-9a-fA-F]{40}");
 
-    private final Path serverRoot;
-    private final Supplier<MineCICDConfig> config;
+    private final MineCICD plugin;
     private Git git;
     private Repository repo;
 
-    public GitService(Path serverRoot, Supplier<MineCICDConfig> config) {
-        this.serverRoot = serverRoot;
-        this.config = config;
+    public GitService(MineCICD plugin) {
+        this.plugin = plugin;
     }
 
     public boolean isInitialized() {
-        return Files.exists(serverRoot.resolve(".git"));
-    }
-
-    public Path getServerRoot() {
-        return serverRoot;
+        return Files.exists(plugin.serverRoot().resolve(".git"));
     }
 
     public synchronized PullResult pull(boolean force) {
@@ -84,7 +74,7 @@ public class GitService {
     public synchronized PushResult push(String message) {
         openOrInit();
         ensureRemote();
-        String branch = config.get().git().branch();
+        String branch = plugin.config().git().branch();
         ensureLocalBranch(branch);
         Status status;
         try {
@@ -103,7 +93,7 @@ public class GitService {
 
     public synchronized int addToTracking(String pathSpec) {
         String entry = normalizeTrackingEntry(pathSpec);
-        GitIgnoreEditor editor = new GitIgnoreEditor(serverRoot);
+        GitIgnoreEditor editor = new GitIgnoreEditor(plugin.serverRoot());
         boolean changed = editor.remove(entry);
         if (changed) {
             commitIgnoreChange("Added " + entry + " to Git tracking");
@@ -113,7 +103,7 @@ public class GitService {
 
     public synchronized int removeFromTracking(String pathSpec) {
         String entry = normalizeTrackingEntry(pathSpec);
-        GitIgnoreEditor editor = new GitIgnoreEditor(serverRoot);
+        GitIgnoreEditor editor = new GitIgnoreEditor(plugin.serverRoot());
         boolean changed = editor.add(entry);
         if (changed) {
             commitIgnoreChange("Removed " + entry + " from Git tracking");
@@ -201,7 +191,8 @@ public class GitService {
                 return new LogPage(page, maxPage, List.of());
             }
             int from = (page - 1) * PAGE_SIZE;
-            return new LogPage(page, maxPage, new ArrayList<>(all.subList(from, Math.min(from + PAGE_SIZE, all.size()))));
+            return new LogPage(page, maxPage,
+                    new ArrayList<>(all.subList(from, Math.min(from + PAGE_SIZE, all.size()))));
         } catch (IOException e) {
             throw new GitException(rootMessage(e), e);
         }
@@ -223,15 +214,15 @@ public class GitService {
 
     public synchronized StatusInfo status() {
         if (!isInitialized()) {
-            return new StatusInfo("not initialized", config.get().git().repo(), 0, 0);
+            return new StatusInfo("not initialized", plugin.config().git().repo(), 0, 0);
         }
         try {
             open();
             String branch = currentBranch();
             Status st = git.status().call();
             int localChanges = st.getUncommittedChanges().size();
-            int remoteChanges = behindCount(config.get().git().branch());
-            return new StatusInfo(branch, config.get().git().repo(), localChanges, remoteChanges);
+            int remoteChanges = behindCount(plugin.config().git().branch());
+            return new StatusInfo(branch, plugin.config().git().repo(), localChanges, remoteChanges);
         } catch (Exception e) {
             throw new GitException(rootMessage(e), e);
         }
@@ -256,7 +247,7 @@ public class GitService {
         }
         try {
             open();
-            String branch = config.get().git().branch();
+            String branch = plugin.config().git().branch();
             ObjectId head = repo.resolve(Constants.HEAD);
             ObjectId remote = repo.resolve(remoteBranchName(branch));
             if (head == null || remote == null) {
@@ -282,7 +273,7 @@ public class GitService {
 
     public synchronized void resolveRepoReset() {
         openOrInit();
-        String branch = config.get().git().branch();
+        String branch = plugin.config().git().branch();
         ObjectId remote;
         try {
             remote = repo.resolve(remoteBranchName(branch));
@@ -324,8 +315,8 @@ public class GitService {
             return;
         }
         Repository opened = new FileRepositoryBuilder()
-                .setWorkTree(serverRoot.toFile())
-                .findGitDir(serverRoot.toFile())
+                .setWorkTree(plugin.serverRoot().toFile())
+                .findGitDir(plugin.serverRoot().toFile())
                 .build();
         repo = opened;
         git = new Git(opened);
@@ -336,7 +327,9 @@ public class GitService {
             if (isInitialized()) {
                 open();
             } else {
-                git = Git.init().setDirectory(serverRoot.toFile()).setInitialBranch(config.get().git().branch()).call();
+                git = Git.init().setDirectory(plugin.serverRoot().toFile())
+                        .setInitialBranch(plugin.config().git().branch())
+                        .call();
                 repo = git.getRepository();
             }
         } catch (Exception e) {
@@ -345,7 +338,7 @@ public class GitService {
     }
 
     private void ensureRemote() {
-        String url = config.get().git().repo();
+        String url = plugin.config().git().repo();
         // L-06/S-06: enforce an allowlist of authenticated, encrypted transports.
         // git:// has no transport authentication or encryption; a network attacker
         // could impersonate the remote and alter files during a pull.
@@ -363,17 +356,22 @@ public class GitService {
     }
 
     /**
-     * Validates that a configured remote URL uses an authenticated, encrypted transport.
+     * Validates that a configured remote URL uses an authenticated, encrypted
+     * transport.
      * Allowed schemes:
      * <ul>
-     *   <li>{@code https://} - HTTPS transport with server certificate verification.</li>
-     *   <li>{@code ssh://[user@]host/path} - SSH transport.</li>
-     *   <li>{@code git@host:path} - scp-style SSH URL.</li>
+     * <li>{@code https://} - HTTPS transport with server certificate
+     * verification.</li>
+     * <li>{@code ssh://[user@]host/path} - SSH transport.</li>
+     * <li>{@code git@host:path} - scp-style SSH URL.</li>
      * </ul>
-     * Explicitly rejected: {@code git://} (unauthenticated, unencrypted), {@code file://},
-     * {@code ext::}, and any URL containing {@code ..} (path traversal / transport smuggling).
+     * Explicitly rejected: {@code git://} (unauthenticated, unencrypted),
+     * {@code file://},
+     * {@code ext::}, and any URL containing {@code ..} (path traversal / transport
+     * smuggling).
      *
-     * @throws GitException if the URL is null, blank, or uses a disallowed transport
+     * @throws GitException if the URL is null, blank, or uses a disallowed
+     *                      transport
      */
     static void validateRemoteUrl(String url) {
         if (url == null || url.isBlank()) {
@@ -398,16 +396,16 @@ public class GitService {
     }
 
     private CredentialsProvider credentials() {
-        String user = config.get().git().user();
+        String user = plugin.config().git().user();
         if (user == null || user.isEmpty()) {
             return null;
         }
-        return new UsernamePasswordCredentialsProvider(user, config.get().git().pass());
+        return new UsernamePasswordCredentialsProvider(user, plugin.config().git().pass());
     }
 
     private ObjectId remoteBranchTip() {
         try {
-            Ref ref = repo.exactRef(remoteBranchName(config.get().git().branch()));
+            Ref ref = repo.exactRef(remoteBranchName(plugin.config().git().branch()));
             return ref == null ? null : ref.getObjectId();
         } catch (IOException e) {
             return null;
@@ -455,7 +453,7 @@ public class GitService {
     }
 
     private void syncToConfiguredBranch(boolean force) {
-        String branch = config.get().git().branch();
+        String branch = plugin.config().git().branch();
         Ref remoteRef = findOrNull(remoteBranchName(branch));
         Ref localRef = findOrNull(Constants.R_HEADS + branch);
         if (remoteRef == null || remoteRef.getObjectId() == null) {
@@ -537,7 +535,8 @@ public class GitService {
     private int behindCount(String branch) {
         Ref remoteRef = findOrNull(remoteBranchName(branch));
         Ref localHead = findOrNull(Constants.HEAD);
-        if (remoteRef == null || localHead == null || remoteRef.getObjectId() == null || localHead.getObjectId() == null) {
+        if (remoteRef == null || localHead == null || remoteRef.getObjectId() == null
+                || localHead.getObjectId() == null) {
             return 0;
         }
         return countAhead(remoteRef.getObjectId(), localHead.getObjectId());
@@ -560,11 +559,11 @@ public class GitService {
     }
 
     private void commitWithIdentity(String message) {
-        String name = config.get().git().user();
+        String name = plugin.config().git().user();
         if (name == null || name.isBlank()) {
             name = "MineCICD";
         }
-        String email = config.get().git().email();
+        String email = plugin.config().git().email();
         if (email == null || email.isBlank()) {
             email = "minecicd@minecicd.local";
         }
@@ -579,14 +578,14 @@ public class GitService {
     private void commitIgnoreChange(String message) {
         openOrInit();
         ensureRemote();
-        ensureLocalBranch(config.get().git().branch());
+        ensureLocalBranch(plugin.config().git().branch());
         try {
             git.add().addFilepattern(".gitignore").call();
             commitWithIdentity(message);
         } catch (Exception e) {
             throw new GitException(rootMessage(e), e);
         }
-        pushToRemote(config.get().git().branch());
+        pushToRemote(plugin.config().git().branch());
     }
 
     private void pushToRemote(String branch) {
@@ -717,9 +716,10 @@ public class GitService {
                 throw new GitException("Invalid path: " + pathSpec);
             }
         }
-        // M-05: rely solely on syntactic trailing '/' (TOCTOU-safe); callers must include '/' for directories
-        Path resolved = serverRoot.resolve(p).normalize().toAbsolutePath();
-        Path base = serverRoot.normalize().toAbsolutePath();
+        // M-05: rely solely on syntactic trailing '/' (TOCTOU-safe); callers must
+        // include '/' for directories
+        Path resolved = plugin.serverRoot().resolve(p).normalize().toAbsolutePath();
+        Path base = plugin.serverRoot().normalize().toAbsolutePath();
         if (!resolved.startsWith(base)) {
             throw new GitException("Path escapes server root: " + pathSpec);
         }

@@ -21,7 +21,7 @@ public class ScriptManager {
 
     public ScriptManager(MineCICD plugin) {
         this.plugin = plugin;
-        this.scriptsDir = plugin.getServerRoot().resolve("plugins").resolve("MineCICD").resolve("scripts");
+        this.scriptsDir = plugin.serverRoot().resolve("plugins").resolve("MineCICD").resolve("scripts");
     }
 
     public void reload() {

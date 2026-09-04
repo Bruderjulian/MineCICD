@@ -34,10 +34,12 @@ public final class MineCICD extends JavaPlugin {
     private volatile boolean controlActive;
     private volatile String controlAddress = "disabled";
     private boolean resumed;
+    private Path serverRoot;
 
     @Override
     public void onEnable() {
-        Path root = getServerRoot();
+        serverRoot = getDataFolder().getParentFile().getParentFile().toPath();
+
         if (!getDataFolder().exists()) {
             getDataFolder().mkdirs();
         }
@@ -45,19 +47,18 @@ public final class MineCICD extends JavaPlugin {
 
         this.config = new MineCICDConfig(this);
         this.messages = new Messages(this);
-        this.msg = new Msg(this, messages);
-        this.bossBars = new BossBars(this, messages, config.bossBar().enabled(), config.bossBar().durationTicks());
-        this.gitService = new GitService(root, () -> config);
+        this.msg = new Msg(this);
+        this.bossBars = new BossBars(this);
+        this.gitService = new GitService(this);
         this.scriptManager = new ScriptManager(this);
         this.secretManager = new SecretManager(this);
         this.pendingStore = new PendingStore(getDataFolder().toPath());
-        this.cicdService = new CicdService(this, config, gitService, 
-                scriptManager, bossBars, messages, msg, pendingStore);
+        this.cicdService = new CicdService(this);
 
         secretManager.load();
 
-        getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, commands ->
-                commands.registrar().register(new MineCICDCommand(cicdService, messages, msg).build()));
+        getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS,
+                commands -> commands.registrar().register(new MineCICDCommand(cicdService, messages, msg).build()));
 
         startControlServer();
 
@@ -154,12 +155,48 @@ public final class MineCICD extends JavaPlugin {
         }
     }
 
-    public Path getServerRoot() {
-        return getDataFolder().getParentFile().getParentFile().toPath();
+    public Path serverRoot() {
+        return serverRoot;
     }
 
-    public MineCICDConfig getConfigRecord() {
+    public MineCICDConfig config() {
         return config;
+    }
+
+    public Messages messages() {
+        return messages;
+    }
+
+    public Msg msg() {
+        return msg;
+    }
+
+    public BossBars bossBars() {
+        return bossBars;
+    }
+
+    public GitService gitService() {
+        return gitService;
+    }
+
+    public ScriptManager scriptManager() {
+        return scriptManager;
+    }
+
+    public SecretManager secretManager() {
+        return secretManager;
+    }
+
+    public PendingStore pendingStore() {
+        return pendingStore;
+    }
+
+    public CicdService cicdService() {
+        return cicdService;
+    }
+
+    public ControlServer controlServer() {
+        return controlServer;
     }
 
     public boolean isControlActive() {

@@ -18,7 +18,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 public class SecretManager {
 
@@ -36,7 +35,7 @@ public class SecretManager {
 
     public void load() {
         mapping.clear();
-        Path root = plugin.getServerRoot();
+        Path root = plugin.serverRoot();
         File secretsFile = root.resolve("secrets.yml").toFile();
         if (secretsFile.isFile()) {
             YamlConfiguration secrets = YamlConfiguration.loadConfiguration(secretsFile);
@@ -99,7 +98,7 @@ public class SecretManager {
     }
 
     private void writeAttributes() {
-        Path attributes = plugin.getServerRoot().resolve(ATTR_FILE);
+        Path attributes = plugin.serverRoot().resolve(ATTR_FILE);
         try {
             StringBuilder out = new StringBuilder();
             if (Files.exists(attributes)) {
@@ -151,7 +150,7 @@ public class SecretManager {
     }
 
     private void writeGitConfig() {
-        Path gitDir = plugin.getServerRoot().resolve(".git");
+        Path gitDir = plugin.serverRoot().resolve(".git");
         if (!Files.isDirectory(gitDir)) {
             return;
         }
@@ -228,7 +227,7 @@ public class SecretManager {
             }
             hardenPermissions(mappingFile.toPath());
             // harden secrets.yml itself (600) and warn if still world-readable
-            Path secretsYml = plugin.getServerRoot().resolve("secrets.yml");
+            Path secretsYml = plugin.serverRoot().resolve("secrets.yml");
             if (Files.exists(secretsYml)) {
                 hardenPermissions(secretsYml);
                 try {

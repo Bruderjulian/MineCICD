@@ -3,7 +3,6 @@ package com.lemonlightmc.minecicd.http;
 import com.lemonlightmc.minecicd.MineCICD;
 import com.lemonlightmc.minecicd.git.CommitActions.Action;
 import com.lemonlightmc.minecicd.http.ControlRequest.ParseException;
-import com.lemonlightmc.minecicd.pending.PendingRequest;
 import com.lemonlightmc.minecicd.util.Ids;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -57,8 +56,8 @@ public class ControlServer {
     private java.util.concurrent.ScheduledExecutorService failurePurger;
 
     public ControlServer(MineCICD plugin, String host, int port, String path, String secret,
-                         ControlSecurity security, Delegate delegate, SSLContext sslContext,
-                         long maxBodyBytes) {
+            ControlSecurity security, Delegate delegate, SSLContext sslContext,
+            long maxBodyBytes) {
         this.plugin = plugin;
         this.host = host == null || host.isBlank() ? "0.0.0.0" : host;
         this.port = port;
@@ -97,9 +96,11 @@ public class ControlServer {
                             String[] protos = sslParams.getProtocols();
                             java.util.List<String> allowed = new java.util.ArrayList<>();
                             for (String p : protos) {
-                                if ("TLSv1.2".equals(p) || "TLSv1.3".equals(p)) allowed.add(p);
+                                if ("TLSv1.2".equals(p) || "TLSv1.3".equals(p))
+                                    allowed.add(p);
                             }
-                            if (!allowed.isEmpty()) sslParams.setProtocols(allowed.toArray(new String[0]));
+                            if (!allowed.isEmpty())
+                                sslParams.setProtocols(allowed.toArray(new String[0]));
                             params.setSSLParameters(sslParams);
                         } catch (Exception ignored) {
                             super.configure(params);
@@ -156,7 +157,7 @@ public class ControlServer {
         }
     }
 
-     private void handlePost(HttpExchange exchange) {
+    private void handlePost(HttpExchange exchange) {
         long startNano = System.nanoTime();
         try {
             if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
@@ -207,7 +208,7 @@ public class ControlServer {
                 return;
             }
             String branch = request.branch();
-            String configured = plugin.getConfigRecord() == null ? null : plugin.getConfigRecord().git().branch();
+            String configured = plugin.config() == null ? null : plugin.config().git().branch();
             if (branch == null || branch.isBlank()) {
                 branch = configured;
             }
@@ -232,7 +233,7 @@ public class ControlServer {
     }
 
     private boolean branchMatches(String requested) {
-        var cfg = plugin.getConfigRecord();
+        var cfg = plugin.config();
         if (cfg == null) {
             return false;
         }
@@ -309,7 +310,10 @@ public class ControlServer {
         }
         final ProgressStream activeStream = stream;
         if (!activeStream.add(exchange)) {
-            try { exchange.close(); } catch (Exception ignored) {}
+            try {
+                exchange.close();
+            } catch (Exception ignored) {
+            }
             return;
         }
         // L-04: waiter with idle timeout and proper exchange close
@@ -331,7 +335,10 @@ public class ControlServer {
                 }
             } catch (InterruptedException ignored) {
             } finally {
-                try { exchange.close(); } catch (Exception ignored) {}
+                try {
+                    exchange.close();
+                } catch (Exception ignored) {
+                }
             }
         }, "minecicd-stream-" + requestId);
         waiter.setDaemon(true);

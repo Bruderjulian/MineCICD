@@ -126,7 +126,7 @@ public class Script {
       }
       pb.redirectErrorStream(true);
       // M-04: sandbox - restrict working dir, sanitize env
-      pb.directory(plugin.getServerRoot().toFile());
+      pb.directory(plugin.serverRoot().toFile());
       // clear and allowlist minimal env
       java.util.Map<String, String> env = pb.environment();
       String path = env.get("PATH");

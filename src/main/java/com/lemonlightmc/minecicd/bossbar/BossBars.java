@@ -1,7 +1,6 @@
 package com.lemonlightmc.minecicd.bossbar;
 
 import com.lemonlightmc.minecicd.MineCICD;
-import com.lemonlightmc.minecicd.messaging.Messages;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
@@ -12,16 +11,14 @@ import java.util.Map;
 public class BossBars {
 
     private final MineCICD plugin;
-    private final Messages messages;
     private boolean enabled;
     private int durationTicks;
     private BossBar current;
 
-    public BossBars(MineCICD plugin, Messages messages, boolean enabled, int durationTicks) {
+    public BossBars(MineCICD plugin) {
         this.plugin = plugin;
-        this.messages = messages;
-        this.enabled = enabled;
-        this.durationTicks = durationTicks;
+        this.enabled = plugin.config().bossBar().enabled();
+        this.durationTicks = plugin.config().bossBar().durationTicks();
     }
 
     public void reconfigure(boolean enabled, int durationTicks) {
@@ -33,7 +30,7 @@ public class BossBars {
     }
 
     public void show(String path, Map<String, String> placeholders) {
-        show(messages.get("bossbar-" + path, placeholders));
+        show(plugin.messages().get("bossbar-" + path, placeholders));
     }
 
     public void show(Component name) {

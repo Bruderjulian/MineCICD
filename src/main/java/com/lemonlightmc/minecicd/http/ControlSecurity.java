@@ -1,6 +1,5 @@
 package com.lemonlightmc.minecicd.http;
 
-import com.lemonlightmc.minecicd.git.CommitActions;
 import com.lemonlightmc.minecicd.git.CommitActions.Action;
 import com.lemonlightmc.minecicd.git.CommitActions.ActionType;
 import com.lemonlightmc.minecicd.util.Ids;

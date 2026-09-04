@@ -2,11 +2,7 @@
 
 **Continuous Integration & Continuous Delivery for Minecraft Servers.**
 
-MineCICD turns your Minecraft server root into a Git repository, letting you track server configurations, plugins, and scripts in version control. Pull remote changes, push server edits, define commit-triggered actions (restart, reload, run commands, run scripts), and automate deploys from GitHub Actions — all without leaving the server.
-
-Supports **Paper** (primary) and **Spigot** across Minecraft versions **1.8 – 1.21+**, and runs on **Java 21+**.
-
----
+MineCICD turns your Minecraft server root into a Git repository, letting you track server configurations, plugins, and scripts in version control. Pull remote changes, push server edits, define commit-triggered actions (restart, reload, run commands, run scripts), and automate deploys from GitHub Actions - All without leaving the server.
 
 ## Table of Contents
 
@@ -27,14 +23,12 @@ Supports **Paper** (primary) and **Spigot** across Minecraft versions **1.8 – 
 
 ## Prerequisites
 
-| Requirement | Details |
-|---|---|
-| Minecraft server | Paper (recommended) or Spigot, version 1.8 – 1.21+ |
-| Java | 21 or newer |
-| Git repository | A remote repository (GitHub, GitLab, Bitbucket, self-hosted) |
-| Access token | A GitHub Personal Access Token with **contents: read + write** scope on the repo (or equivalent for other providers) |
-
----
+| Requirement      | Details                                                                                                              |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Minecraft server | Paper (recommended) or Spigot, version 1.8 – 1.21+                                                                   |
+| Java             | 21 or newer                                                                                                          |
+| Git repository   | A remote repository (GitHub, GitLab, Bitbucket, self-hosted)                                                         |
+| Access token     | A GitHub Personal Access Token with **contents: read + write** scope on the repo (or equivalent for other providers) |
 
 ## Installation
 
@@ -54,9 +48,9 @@ All settings live in `plugins/MineCICD/config.yml`.
 
 ```yaml
 git:
-  user: ""   # Username or Personal Access Token
-  pass: ""   # Password or Personal Access Token
-  repo: ""   # Remote repository URL (https:// or ssh://)
+  user: "" # Username or Personal Access Token
+  pass: "" # Password or Personal Access Token
+  repo: "" # Remote repository URL (https:// or ssh://)
   branch: "master"
 ```
 
@@ -70,16 +64,16 @@ The Control API lets GitHub Actions (or any HMAC-signed client) trigger deploys 
 
 ```yaml
 control:
-  host: "127.0.0.1"          # Bind address — keep on loopback
+  host: "127.0.0.1" # Bind address — keep on loopback
   port: 8080
-  path: "minecicd"            # URL path suffix
-  secret: ""                  # REQUIRED — at least 32 bytes, used for HMAC-SHA256
+  path: "minecicd" # URL path suffix
+  secret: "" # REQUIRED — at least 32 bytes, used for HMAC-SHA256
   tls:
-    enabled: false            # Enable native HTTPS (see below)
+    enabled: false # Enable native HTTPS (see below)
     keystore: ""
     password: ""
   push-message: "Auto-commit by MineCICD"
-  branches: []                # Empty = all branches
+  branches: [] # Empty = all branches
   max-body-bytes: 65536
   replay-window-seconds: 300
   actions:
@@ -90,7 +84,7 @@ control:
     reload-plugins: true
     commands:
       enabled: false
-      allow: [say, save-all]  # Exact command names only
+      allow: [say, save-all] # Exact command names only
     scripts:
       enabled: false
       allow: [deploy, backup] # Exact script names only
@@ -101,10 +95,10 @@ control:
 ### Other options
 
 ```yaml
-experimental-jar-loading: false  # Hot-load plugin JARs (requires PlugManX)
+experimental-jar-loading: false # Hot-load plugin JARs (requires PlugManX)
 bossbar:
   enabled: true
-  duration: 100                  # Ticks to show boss bar feedback
+  duration: 100 # Ticks to show boss bar feedback
 ```
 
 ---
@@ -127,12 +121,12 @@ The typical workflow is: **add → commit → push → pull**.
 
 ### What to track
 
-| Track | Don't track |
-|---|---|
-| Plugin configs (`plugins/*/config.yml`) | Player data (`world/playerdata/`) |
+| Track                                              | Don't track                             |
+| -------------------------------------------------- | --------------------------------------- |
+| Plugin configs (`plugins/*/config.yml`)            | Player data (`world/playerdata/`)       |
 | Server configs (`server.properties`, `bukkit.yml`) | World files (`world/`, `world_nether/`) |
-| Scripts and tooling | Runtime-generated logs |
-| Custom plugin JARs (with caution) | Dynamically updated databases |
+| Scripts and tooling                                | Runtime-generated logs                  |
+| Custom plugin JARs (with caution)                  | Dynamically updated databases           |
 
 ---
 
@@ -147,13 +141,13 @@ CICD run say Server updating in 5 seconds
 CICD script deploy
 ```
 
-| Directive | Behavior |
-|---|---|
-| `CICD restart` | Stops the server (your restart script / host process handles restart) |
-| `CICD global-reload` | Runs the server `reload` command |
+| Directive              | Behavior                                                                                                        |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `CICD restart`         | Stops the server (your restart script / host process handles restart)                                           |
+| `CICD global-reload`   | Runs the server `reload` command                                                                                |
 | `CICD reload <plugin>` | Unloads and reloads a specific plugin (requires [PlugManX](https://www.spigotmc.org/resources/plugmanx.88135/)) |
-| `CICD run <command>` | Executes a Minecraft command (e.g., `say Hello`) |
-| `CICD script <name>` | Runs a script from `plugins/MineCICD/scripts/` |
+| `CICD run <command>`   | Executes a Minecraft command (e.g., `say Hello`)                                                                |
+| `CICD script <name>`   | Runs a script from `plugins/MineCICD/scripts/`                                                                  |
 
 Multiple `reload`, `run`, and `script` directives can appear on separate lines. Only one of `restart` / `global-reload` / `reload <plugin>` is performed per commit (first match wins).
 
@@ -201,31 +195,31 @@ See `plugins/MineCICD/scripts/example_script.sh` for syntax examples.
 
 All commands are subcommands of `/minecicd` (alias: `/mcicd`).
 
-| Command | Description |
-|---|---|
-| `/minecicd pull [force]` | Fetch and merge remote changes. First run initialises the repo. |
-| `/minecicd push <message>` | Stage all changes, commit, and push. |
-| `/minecicd add <path>` | Add a file or directory to the managed `.gitignore` and track it. |
-| `/minecicd remove <path>` | Remove a file or directory from tracking. |
-| `/minecicd reset <commit>` | Hard-reset the branch to a specific commit. |
-| `/minecicd revert <commit>` | Revert a commit's changes (creates a new commit). |
-| `/minecicd rollback <dd.MM.yyyy HH:mm:ss>` | Hard-reset to the latest commit before the given date. |
-| `/minecicd log [page\|commit]` | View commit history, or details of a specific commit. |
-| `/minecicd status` | Show plugin, repo, webhook, and change status. |
-| `/minecicd diff <local\|remote>` | Show uncommitted changes (local) or unpulled remote changes. |
-| `/minecicd script <name>` | Run a named script. |
-| `/minecicd resolve <action>` | Resolve conflicts: `merge-abort`, `repo-reset`, or `reset-local-changes`. |
-| `/minecicd reload` | Reload config and webhook server. |
-| `/minecicd help` | Show help. |
+| Command                                    | Description                                                               |
+| ------------------------------------------ | ------------------------------------------------------------------------- |
+| `/minecicd pull [force]`                   | Fetch and merge remote changes. First run initialises the repo.           |
+| `/minecicd push <message>`                 | Stage all changes, commit, and push.                                      |
+| `/minecicd add <path>`                     | Add a file or directory to the managed `.gitignore` and track it.         |
+| `/minecicd remove <path>`                  | Remove a file or directory from tracking.                                 |
+| `/minecicd reset <commit>`                 | Hard-reset the branch to a specific commit.                               |
+| `/minecicd revert <commit>`                | Revert a commit's changes (creates a new commit).                         |
+| `/minecicd rollback <dd.MM.yyyy HH:mm:ss>` | Hard-reset to the latest commit before the given date.                    |
+| `/minecicd log [page\|commit]`             | View commit history, or details of a specific commit.                     |
+| `/minecicd status`                         | Show plugin, repo, webhook, and change status.                            |
+| `/minecicd diff <local\|remote>`           | Show uncommitted changes (local) or unpulled remote changes.              |
+| `/minecicd script <name>`                  | Run a named script.                                                       |
+| `/minecicd resolve <action>`               | Resolve conflicts: `merge-abort`, `repo-reset`, or `reset-local-changes`. |
+| `/minecicd reload`                         | Reload config and webhook server.                                         |
+| `/minecicd help`                           | Show help.                                                                |
 
 ---
 
 ## Permissions Reference
 
-| Permission | Description |
-|---|---|
+| Permission              | Description                                                     |
+| ----------------------- | --------------------------------------------------------------- |
 | `minecicd.<subcommand>` | Grants access to a specific subcommand (e.g., `minecicd.pull`). |
-| `minecicd.notify` | Receive in-game notifications from MineCICD actions. |
+| `minecicd.notify`       | Receive in-game notifications from MineCICD actions.            |
 
 Use a permissions manager (LuckPerms, etc.) to assign these to groups or players.
 
@@ -246,9 +240,9 @@ MineCICD provides an official GitHub Action for automated deploys: [lemonlightmc
 - name: Deploy to server
   uses: lemonlightmc/minecicd-deploy@v1
   with:
-    server-url: ${{ secrets.MINECICD_URL }}     # e.g. https://your-server:8080/minecicd
+    server-url: ${{ secrets.MINECICD_URL }} # e.g. https://your-server:8080/minecicd
     secret: ${{ secrets.MINECICD_SECRET }}
-    actions: pull,restart                        # comma-separated list
+    actions: pull,restart # comma-separated list
 ```
 
 The action signs each request with HMAC-SHA256 and drives the deploy to completion. You can poll the `/stream` (SSE) and `/status` endpoints with the same signature to follow progress.
@@ -274,17 +268,17 @@ Version 3.0.0 is a complete rewrite. The config format has changed and the plugi
 
 ## Troubleshooting
 
-| Problem | Fix |
-|---|---|
-| `/minecicd pull` says "repo not initialised" | Run `/minecicd pull` again — first run clones the repo. Check that `git.repo` is correct. |
-| Push fails with 401 / 403 | Verify your Personal Access Token has **contents: read + write** scope. Check `git.user` and `git.pass`. |
-| SSH remote fails | Ensure the server's SSH key is added as a deploy key on the remote. Check `ssh-keyscan` output. |
-| Control API returns 403 | The HMAC signature is invalid. Ensure `control.secret` matches on server and client. Check timestamp skew. |
-| Control API returns 409 | Another request is already in flight. Wait for it to finish (only one request at a time). |
-| Secrets not replacing | Run `/minecicd reload` after editing `secrets.yml`. Check key names match exactly. |
-| Merge conflicts | Run `/minecicd resolve merge-abort` to undo, or `/minecicd resolve repo-reset` to reset. |
-| Plugin not loading after pull | Check the Paper/Spigot console for errors. If using `experimental-jar-loading`, ensure PlugManX is installed. |
-| Boss bar not showing | Check `bossbar.enabled` in config. Ensure your client supports Adventure boss bars (1.19.3+). |
+| Problem                                      | Fix                                                                                                           |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `/minecicd pull` says "repo not initialised" | Run `/minecicd pull` again — first run clones the repo. Check that `git.repo` is correct.                     |
+| Push fails with 401 / 403                    | Verify your Personal Access Token has **contents: read + write** scope. Check `git.user` and `git.pass`.      |
+| SSH remote fails                             | Ensure the server's SSH key is added as a deploy key on the remote. Check `ssh-keyscan` output.               |
+| Control API returns 403                      | The HMAC signature is invalid. Ensure `control.secret` matches on server and client. Check timestamp skew.    |
+| Control API returns 409                      | Another request is already in flight. Wait for it to finish (only one request at a time).                     |
+| Secrets not replacing                        | Run `/minecicd reload` after editing `secrets.yml`. Check key names match exactly.                            |
+| Merge conflicts                              | Run `/minecicd resolve merge-abort` to undo, or `/minecicd resolve repo-reset` to reset.                      |
+| Plugin not loading after pull                | Check the Paper/Spigot console for errors. If using `experimental-jar-loading`, ensure PlugManX is installed. |
+| Boss bar not showing                         | Check `bossbar.enabled` in config. Ensure your client supports Adventure boss bars (1.19.3+).                 |
 
 ---
 

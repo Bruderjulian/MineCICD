@@ -58,24 +58,24 @@ public class CicdService implements ControlServer.Delegate {
                 Results.PullResult result = plugin.gitService().pull(force);
                 processCommitActions(result.commits());
                 if (result.initialized()) {
-                    plugin.msg().send(sender, "pull-success");
+                    plugin.messages().send(sender, "pull-success");
                     plugin.bossBars().show("pulled-changes", Map.of());
                     return Boolean.TRUE;
                 }
                 if (result.changed()) {
-                    plugin.msg().send(sender, "pull-success");
+                    plugin.messages().send(sender, "pull-success");
                     plugin.bossBars().show("pulled-changes", Map.of());
                 } else {
-                    plugin.msg().send(sender, "pull-no-changes");
+                    plugin.messages().send(sender, "pull-no-changes");
                     plugin.bossBars().show("pulled-no-changes", Map.of());
                 }
                 return Boolean.TRUE;
             } catch (GitException.PullAborted e) {
-                plugin.msg().send(sender, "pull-aborted");
+                plugin.messages().send(sender, "pull-aborted");
                 plugin.bossBars().show("pull-aborted-changes", Map.of());
                 return Boolean.FALSE;
             } catch (Exception e) {
-                plugin.msg().send(sender, "pull-failed", Map.of("error", safeMessage(e)));
+                plugin.messages().send(sender, "pull-failed", Map.of("error", safeMessage(e)));
                 plugin.bossBars().show("pull-failed", Map.of());
                 return Boolean.FALSE;
             }
@@ -126,15 +126,15 @@ public class CicdService implements ControlServer.Delegate {
                 plugin.bossBars().show("pushing", Map.of());
                 Results.PushResult result = plugin.gitService().push(message);
                 if (result.hadChanges()) {
-                    plugin.msg().send(sender, "push-success");
+                    plugin.messages().send(sender, "push-success");
                     plugin.bossBars().show("pushed", Map.of());
                 } else {
                     plugin.bossBars().show("push-no-changes", Map.of());
-                    plugin.msg().send(sender, "push-no-changes");
+                    plugin.messages().send(sender, "push-no-changes");
                 }
                 return Boolean.TRUE;
             } catch (Exception e) {
-                plugin.msg().send(sender, "push-failed", Map.of("error", safeMessage(e)));
+                plugin.messages().send(sender, "push-failed", Map.of("error", safeMessage(e)));
                 plugin.bossBars().show("push-failed", Map.of());
                 return Boolean.FALSE;
             }
@@ -145,11 +145,11 @@ public class CicdService implements ControlServer.Delegate {
         return enqueue(() -> {
             try {
                 int amount = plugin.gitService().addToTracking(path);
-                plugin.msg().send(sender, "add-success", Map.of("amount", String.valueOf(amount)));
+                plugin.messages().send(sender, "add-success", Map.of("amount", String.valueOf(amount)));
                 plugin.bossBars().show("added", Map.of("amount", String.valueOf(amount)));
                 return Boolean.TRUE;
             } catch (Exception e) {
-                plugin.msg().send(sender, "add-failed", Map.of("error", safeMessage(e)));
+                plugin.messages().send(sender, "add-failed", Map.of("error", safeMessage(e)));
                 plugin.bossBars().show("adding-failed", Map.of());
                 return Boolean.FALSE;
             }
@@ -160,11 +160,11 @@ public class CicdService implements ControlServer.Delegate {
         return enqueue(() -> {
             try {
                 int amount = plugin.gitService().removeFromTracking(path);
-                plugin.msg().send(sender, "remove-success", Map.of("amount", String.valueOf(amount)));
+                plugin.messages().send(sender, "remove-success", Map.of("amount", String.valueOf(amount)));
                 plugin.bossBars().show("removed", Map.of("amount", String.valueOf(amount)));
                 return Boolean.TRUE;
             } catch (Exception e) {
-                plugin.msg().send(sender, "remove-failed", Map.of("error", safeMessage(e)));
+                plugin.messages().send(sender, "remove-failed", Map.of("error", safeMessage(e)));
                 plugin.bossBars().show("removing-failed", Map.of());
                 return Boolean.FALSE;
             }
@@ -175,11 +175,11 @@ public class CicdService implements ControlServer.Delegate {
         return enqueue(() -> {
             try {
                 plugin.gitService().reset(commit);
-                plugin.msg().send(sender, "reset-success");
+                plugin.messages().send(sender, "reset-success");
                 plugin.bossBars().show("reset", Map.of());
                 return Boolean.TRUE;
             } catch (Exception e) {
-                plugin.msg().send(sender, "reset-failed", Map.of("error", safeMessage(e)));
+                plugin.messages().send(sender, "reset-failed", Map.of("error", safeMessage(e)));
                 plugin.bossBars().show("reset-failed", Map.of());
                 return Boolean.FALSE;
             }
@@ -190,11 +190,11 @@ public class CicdService implements ControlServer.Delegate {
         return enqueue(() -> {
             try {
                 plugin.gitService().revert(commit);
-                plugin.msg().send(sender, "revert-success");
+                plugin.messages().send(sender, "revert-success");
                 plugin.bossBars().show("reverted", Map.of());
                 return Boolean.TRUE;
             } catch (Exception e) {
-                plugin.msg().send(sender, "revert-failed", Map.of("error", safeMessage(e)));
+                plugin.messages().send(sender, "revert-failed", Map.of("error", safeMessage(e)));
                 plugin.bossBars().show("revert-failed", Map.of());
                 return Boolean.FALSE;
             }
@@ -205,12 +205,12 @@ public class CicdService implements ControlServer.Delegate {
         return enqueue(() -> {
             try {
                 plugin.gitService().rollback(date);
-                plugin.msg().send(sender, "rollback-success");
+                plugin.messages().send(sender, "rollback-success");
                 plugin.bossBars().show("reset", Map.of());
                 return Boolean.TRUE;
             } catch (Exception e) {
                 String message = safeMessage(e);
-                plugin.msg().send(sender, "rollback-failed", Map.of("error", message));
+                plugin.messages().send(sender, "rollback-failed", Map.of("error", message));
                 plugin.bossBars().show("reset-failed", Map.of());
                 return Boolean.FALSE;
             }
@@ -239,11 +239,11 @@ public class CicdService implements ControlServer.Delegate {
                 plugin.bossBars().show("script", Map.of());
                 plugin.scriptManager().run(name, sender, line -> {
                 });
-                plugin.msg().send(sender, "script-success");
+                plugin.messages().send(sender, "script-success");
                 plugin.bossBars().show("script-success", Map.of());
                 return Boolean.TRUE;
             } catch (ScriptException e) {
-                plugin.msg().send(sender, "script-failed", Map.of("error", e.getMessage()));
+                plugin.messages().send(sender, "script-failed", Map.of("error", e.getMessage()));
                 plugin.bossBars().show("script-failed", Map.of());
                 return Boolean.FALSE;
             }
@@ -258,14 +258,14 @@ public class CicdService implements ControlServer.Delegate {
                     case "repo-reset" -> plugin.gitService().resolveRepoReset();
                     case "reset-local-changes" -> plugin.gitService().resolveResetLocalChanges();
                     default -> {
-                        plugin.msg().send(sender, "resolve-usage");
+                        plugin.messages().send(sender, "resolve-usage");
                         return Boolean.FALSE;
                     }
                 }
-                plugin.msg().send(sender, "resolve-success-" + mode);
+                plugin.messages().send(sender, "resolve-success-" + mode);
                 return Boolean.TRUE;
             } catch (Exception e) {
-                plugin.msg().send(sender, "resolve-failed-" + mode, Map.of("error", safeMessage(e)));
+                plugin.messages().send(sender, "resolve-failed-" + mode, Map.of("error", safeMessage(e)));
                 return Boolean.FALSE;
             }
         });

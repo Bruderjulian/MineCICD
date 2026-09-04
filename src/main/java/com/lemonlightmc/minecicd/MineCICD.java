@@ -8,12 +8,14 @@ import com.lemonlightmc.minecicd.http.ControlSecurity;
 import com.lemonlightmc.minecicd.http.ControlServer;
 import com.lemonlightmc.minecicd.http.ControlTls;
 import com.lemonlightmc.minecicd.messaging.Messages;
-import com.lemonlightmc.minecicd.messaging.Msg;
 import com.lemonlightmc.minecicd.pending.PendingStore;
 import com.lemonlightmc.minecicd.scripts.ScriptManager;
 import com.lemonlightmc.minecicd.secrets.SecretManager;
 import com.destroystokyo.paper.event.server.ServerTickStartEvent;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
+
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
@@ -23,7 +25,6 @@ public final class MineCICD extends JavaPlugin {
 
     private MineCICDConfig config;
     private Messages messages;
-    private Msg msg;
     private BossBars bossBars;
     private GitService gitService;
     private ScriptManager scriptManager;
@@ -47,7 +48,6 @@ public final class MineCICD extends JavaPlugin {
 
         this.config = new MineCICDConfig(this);
         this.messages = new Messages(this);
-        this.msg = new Msg(this);
         this.bossBars = new BossBars(this);
         this.gitService = new GitService(this);
         this.scriptManager = new ScriptManager(this);
@@ -58,12 +58,12 @@ public final class MineCICD extends JavaPlugin {
         secretManager.load();
 
         getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS,
-                commands -> commands.registrar().register(new MineCICDCommand(cicdService, messages, msg).build()));
+                commands -> commands.registrar().register(new MineCICDCommand(cicdService, messages).build()));
 
         startControlServer();
 
-        getServer().getPluginManager().registerEvents(new org.bukkit.event.Listener() {
-            @org.bukkit.event.EventHandler
+        getServer().getPluginManager().registerEvents(new Listener() {
+            @EventHandler
             public void onTickStart(ServerTickStartEvent event) {
                 if (!resumed) {
                     resumed = true;
@@ -91,7 +91,7 @@ public final class MineCICD extends JavaPlugin {
         onDisable();
         config.load();
         messages.load();
-        bossBars.reconfigure(config.bossBar().enabled(), config.bossBar().durationTicks());
+        bossBars.reload();
         secretManager.load();
         startControlServer();
         getLogger().info("MineCICD reloaded.");
@@ -165,10 +165,6 @@ public final class MineCICD extends JavaPlugin {
 
     public Messages messages() {
         return messages;
-    }
-
-    public Msg msg() {
-        return msg;
     }
 
     public BossBars bossBars() {

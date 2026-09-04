@@ -3,7 +3,6 @@ package com.lemonlightmc.minecicd.command;
 import com.lemonlightmc.minecicd.CicdService;
 import com.lemonlightmc.minecicd.git.Results;
 import com.lemonlightmc.minecicd.messaging.Messages;
-import com.lemonlightmc.minecicd.messaging.Msg;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -19,12 +18,10 @@ public class MineCICDCommand {
 
     private final CicdService service;
     private final Messages messages;
-    private final Msg msg;
 
-    public MineCICDCommand(CicdService service, Messages messages, Msg msg) {
+    public MineCICDCommand(CicdService service, Messages messages) {
         this.service = service;
         this.messages = messages;
-        this.msg = msg;
     }
 
     public LiteralCommandNode<CommandSourceStack> build() {
@@ -48,7 +45,7 @@ public class MineCICDCommand {
                                     return Command.SINGLE_SUCCESS;
                                 }))
                         .executes(ctx -> {
-                            msg.send(sender(ctx), "push-usage", Map.of("label", "minecicd"));
+                            messages.send(sender(ctx), "push-usage", Map.of("label", "minecicd"));
                             return Command.SINGLE_SUCCESS;
                         }))
                 .then(Commands.literal("add")
@@ -146,11 +143,11 @@ public class MineCICDCommand {
                 .then(Commands.literal("help")
                         .requires(req("minecicd.help"))
                         .executes(ctx -> {
-                            msg.sendList(sender(ctx), "help", Map.of("label", "minecicd"));
+                            messages.sendList(sender(ctx), "help", Map.of("label", "minecicd"));
                             return Command.SINGLE_SUCCESS;
                         }))
                 .executes(ctx -> {
-                    msg.sendList(sender(ctx), "help", Map.of("label", "minecicd"));
+                    messages.sendList(sender(ctx), "help", Map.of("label", "minecicd"));
                     return Command.SINGLE_SUCCESS;
                 })
                 .build();
@@ -172,15 +169,15 @@ public class MineCICDCommand {
             if (p == null || p.entries().isEmpty()) {
                 return;
             }
-            msg.sendRaw(sender, messages.get("log-list-header", Map.of(
+            messages.sendRaw(sender, messages.get("log-list-header", Map.of(
                     "page", String.valueOf(p.page()),
                     "maxPage", String.valueOf(p.maxPage()))));
             for (Results.LogEntry entry : p.entries()) {
-                msg.sendRaw(sender, messages.get("log-list-line", Map.of(
+                messages.sendRaw(sender, messages.get("log-list-line", Map.of(
                         "date", entry.date(), "revision", entry.revision(),
                         "author", entry.author(), "message", Messages.escape(entry.message()))));
             }
-            msg.sendRaw(sender, messages.get("log-list-end"));
+            messages.sendRaw(sender, messages.get("log-list-end"));
         });
         return Command.SINGLE_SUCCESS;
     }
@@ -188,14 +185,14 @@ public class MineCICDCommand {
     private int showCommit(CommandSender sender, String ref) {
         service.commit(sender, ref).thenAccept(entry -> {
             if (entry == null) {
-                msg.send(sender, "log-invalid-commit");
+                messages.send(sender, "log-invalid-commit");
                 return;
             }
             for (var line : messages.getList("log-single-commit", Map.of(
                     "revision", entry.revision(), "author", entry.author(),
                     "date", entry.date(), "message", Messages.escape(entry.message()),
                     "changes", String.join(", ", entry.changes())))) {
-                msg.sendRaw(sender, line);
+                messages.sendRaw(sender, line);
             }
         });
         return Command.SINGLE_SUCCESS;
@@ -212,7 +209,7 @@ public class MineCICDCommand {
                     "control-address", service.controlAddress(),
                     "local-changes", String.valueOf(s.localChanges()),
                     "remote-changes", String.valueOf(s.remoteChanges())))) {
-                msg.sendRaw(sender, line);
+                messages.sendRaw(sender, line);
             }
         });
         return Command.SINGLE_SUCCESS;
@@ -220,15 +217,15 @@ public class MineCICDCommand {
 
     private int printDiff(CommandSender sender, boolean remote) {
         service.diff(sender, remote).thenAccept(changes -> {
-            msg.sendRaw(sender, messages.get(remote ? "diff-remote-header" : "diff-local-header"));
+            messages.sendRaw(sender, messages.get(remote ? "diff-remote-header" : "diff-local-header"));
             if (changes == null || changes.isEmpty()) {
-                msg.sendRaw(sender, messages.get("diff-no-changes"));
+                messages.sendRaw(sender, messages.get("diff-no-changes"));
             } else {
                 for (String change : changes) {
-                    msg.sendRaw(sender, messages.get("diff-line", Map.of("change", Messages.escape(change))));
+                    messages.sendRaw(sender, messages.get("diff-line", Map.of("change", Messages.escape(change))));
                 }
             }
-            msg.sendRaw(sender, messages.get("diff-end"));
+            messages.sendRaw(sender, messages.get("diff-end"));
         });
         return Command.SINGLE_SUCCESS;
     }

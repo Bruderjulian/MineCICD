@@ -1,14 +1,20 @@
 package com.lemonlightmc.minecicd.messaging;
 
 import com.lemonlightmc.minecicd.MineCICD;
+import com.lemonlightmc.minecicd.util.Threads;
+
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
+
+import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 
+import java.io.File;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -23,28 +29,32 @@ public class Messages {
     }
 
     public void load() {
-        java.io.File file = new java.io.File(plugin.getDataFolder(), "messages.yml");
+        File file = new File(plugin.getDataFolder(), "messages.yml");
         boolean changed = false;
         if (!file.exists()) {
             plugin.saveResource("messages.yml", false);
             changed = true;
         }
+
         config = YamlConfiguration.loadConfiguration(file);
         try (InputStream in = plugin.getResource("messages.yml")) {
-            if (in != null) {
-                YamlConfiguration defaults = YamlConfiguration.loadConfiguration(new InputStreamReader(in, StandardCharsets.UTF_8));
-                config.setDefaults(defaults);
-                for (String key : defaults.getKeys(true)) {
-                    if (!config.contains(key, true)) {
-                        config.set(key, defaults.get(key));
-                        changed = true;
-                    }
+            if (in == null) {
+                return;
+            }
+            YamlConfiguration defaults = YamlConfiguration
+                    .loadConfiguration(new InputStreamReader(in, StandardCharsets.UTF_8));
+            config.setDefaults(defaults);
+            for (String key : defaults.getKeys(true)) {
+                if (!config.contains(key, true)) {
+                    config.set(key, defaults.get(key));
+                    changed = true;
                 }
             }
         } catch (Exception e) {
             plugin.getLogger().warning("Unable to read bundled messages.yml: " + e.getMessage());
         }
         changed |= migrateLegacyValues(file);
+
         if (changed) {
             try {
                 config.save(file);
@@ -52,6 +62,92 @@ public class Messages {
                 plugin.getLogger().warning("Unable to save messages.yml: " + e.getMessage());
             }
         }
+    }
+
+    public void send(CommandSender sender, Component component) {
+        if (sender == null) {
+            return;
+        }
+        Threads.marshaled(plugin, () -> sender.sendMessage(plugin.messages().prefix().append(component)));
+    }
+
+    public void sendRaw(CommandSender sender, Component component) {
+        if (sender == null) {
+            return;
+        }
+        Threads.marshaled(plugin, () -> sender.sendMessage(component));
+    }
+
+    public void send(CommandSender sender, String path) {
+        send(sender, path, Map.of());
+    }
+
+    public void send(CommandSender sender, String path, Map<String, String> placeholders) {
+        send(sender, plugin.messages().get(path, placeholders));
+    }
+
+    public void sendList(CommandSender sender, String path, Map<String, String> placeholders) {
+        if (sender == null) {
+            return;
+        }
+        Threads.marshaled(plugin, () -> {
+            sender.sendMessage(plugin.messages().prefix());
+            List<Component> lines = plugin.messages().getList(path, placeholders);
+            for (Component line : lines) {
+                sender.sendMessage(line);
+            }
+        });
+    }
+
+    public Component get(String path) {
+        return get(path, Map.of());
+    }
+
+    public Component get(String path, Map<String, String> placeholders) {
+        return format(config.getString(path, ""), placeholders);
+    }
+
+    public List<Component> getList(String path) {
+        return getList(path, Map.of());
+    }
+
+    public List<Component> getList(String path, Map<String, String> placeholders) {
+        List<String> raw = config.getStringList(path);
+        final int len = raw.size();
+        List<Component> formatted = new ArrayList<>(len);
+        for (int i = 0; i < len; i++) {
+            formatted.set(i, format(raw.get(i), placeholders));
+        }
+        return formatted;
+    }
+
+    public Component prefix() {
+        return MiniMessage.miniMessage()
+                .deserialize(config.getString("prefix", "<gray>[<green>Mine<aqua>CI<light_purple>CD<gray>] <reset>"));
+    }
+
+    public ConfigurationSection raw() {
+        return config;
+    }
+
+    public static String escape(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        return raw.replace("\\", "\\\\").replace("<", "\\<").replace(">", "\\>");
+    }
+
+    private static Component format(String template, Map<String, String> placeholders) {
+        if (template == null || template.isEmpty()) {
+            return Component.empty();
+        }
+        if (placeholders == null || placeholders.isEmpty()) {
+            return MiniMessage.miniMessage().deserialize(template);
+        }
+        for (Map.Entry<String, String> entry : placeholders.entrySet()) {
+            template = template.replace("{" + entry.getKey() + "}", escape(entry.getValue()));
+        }
+        return MiniMessage.miniMessage().deserialize(template);
     }
 
     private boolean migrateLegacyValues(java.io.File file) {
@@ -65,7 +161,7 @@ public class Messages {
                     changed = true;
                 }
             } else if (config.isList(key)) {
-                List<String> list = new java.util.ArrayList<>(config.getStringList(key));
+                List<String> list = config.getStringList(key); // returns ArrayList
                 boolean listChanged = false;
                 for (int i = 0; i < list.size(); i++) {
                     String migrated = migrateLegacy(list.get(i));
@@ -88,47 +184,50 @@ public class Messages {
         int i = 0;
         while (i < input.length()) {
             char c = input.charAt(i);
-            if (c == '&' && i + 1 < input.length()) {
-                char code = input.charAt(i + 1);
-                if (code == '#') {
-                    // hex color &#rrggbb
-                    if (i + 8 <= input.length()) {
-                        String hex = input.substring(i + 2, i + 8);
-                        if (isHexColor(hex)) {
-                            sb.append("<color:#").append(hex).append(">");
-                            i += 8;
-                            continue;
+            if (c != '&' || i + 1 >= input.length()) {
+                sb.append(c);
+                i++;
+            }
+            // migrate legacy color in line
+            char code = input.charAt(i + 1);
+            if (code == '#') {
+                // hex color &#rrggbb
+                if (i + 8 <= input.length()) {
+                    String hex = input.substring(i + 2, i + 8);
+                    if (isHexColor(hex)) {
+                        sb.append("<color:#").append(hex).append(">");
+                        i += 8;
+                        continue;
+                    }
+                }
+                sb.append(c);
+                i++;
+                continue;
+            }
+            String tag = legacyCode(code);
+            if (tag != null) {
+                if (code == 'x' && i + 2 < input.length()) {
+                    StringBuilder hex = new StringBuilder("#");
+                    int j = i + 2;
+                    boolean valid = true;
+                    while (j + 2 <= input.length() && hex.length() < 7) {
+                        if (input.charAt(j) == '&' && isHex(input.charAt(j + 1))) {
+                            hex.append(input.charAt(j + 1));
+                            j += 2;
+                        } else {
+                            valid = false;
+                            break;
                         }
                     }
-                    sb.append(c);
-                    i++;
-                    continue;
-                }
-                String tag = legacyCode(code);
-                if (tag != null) {
-                    if (code == 'x' && i + 2 < input.length()) {
-                        StringBuilder hex = new StringBuilder("#");
-                        int j = i + 2;
-                        boolean valid = true;
-                        while (j + 2 <= input.length() && hex.length() < 7) {
-                            if (input.charAt(j) == '&' && isHex(input.charAt(j + 1))) {
-                                hex.append(input.charAt(j + 1));
-                                j += 2;
-                            } else {
-                                valid = false;
-                                break;
-                            }
-                        }
-                        if (valid && hex.length() == 7) {
-                            sb.append("<color:").append(hex).append(">");
-                            i = j;
-                            continue;
-                        }
+                    if (valid && hex.length() == 7) {
+                        sb.append("<color:").append(hex).append(">");
+                        i = j;
+                        continue;
                     }
-                    sb.append(tag);
-                    i += 2;
-                    continue;
                 }
+                sb.append(tag);
+                i += 2;
+                continue;
             }
             sb.append(c);
             i++;
@@ -180,48 +279,4 @@ public class Messages {
         };
     }
 
-    public static String escape(String raw) {
-        if (raw == null) {
-            return "";
-        }
-        return raw.replace("\\", "\\\\").replace("<", "\\<").replace(">", "\\>");
-    }
-
-    private static String fill(String template, Map<String, String> placeholders) {
-        if (template == null) {
-            return "";
-        }
-        if (placeholders == null || placeholders.isEmpty()) {
-            return template;
-        }
-        for (Map.Entry<String, String> entry : placeholders.entrySet()) {
-            template = template.replace("{" + entry.getKey() + "}", escape(entry.getValue()));
-        }
-        return template;
-    }
-
-    public Component get(String path) {
-        return get(path, Map.of());
-    }
-
-    public Component get(String path, Map<String, String> placeholders) {
-        return MiniMessage.miniMessage().deserialize(fill(config.getString(path, ""), placeholders));
-    }
-
-    public List<Component> getList(String path) {
-        return getList(path, Map.of());
-    }
-
-    public List<Component> getList(String path, Map<String, String> placeholders) {
-        List<String> raw = config.getStringList(path);
-        return raw.stream().map(line -> MiniMessage.miniMessage().deserialize(fill(line, placeholders))).toList();
-    }
-
-    public Component prefix() {
-        return MiniMessage.miniMessage().deserialize(config.getString("prefix", "<gray>[<green>Mine<aqua>CI<light_purple>CD<gray>] <reset>"));
-    }
-
-    public ConfigurationSection raw() {
-        return config;
-    }
 }

@@ -1,6 +1,8 @@
 package com.lemonlightmc.minecicd.bossbar;
 
 import com.lemonlightmc.minecicd.MineCICD;
+import com.lemonlightmc.minecicd.util.Threads;
+
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
@@ -21,9 +23,9 @@ public class BossBars {
         this.durationTicks = plugin.config().bossBar().durationTicks();
     }
 
-    public void reconfigure(boolean enabled, int durationTicks) {
-        this.enabled = enabled;
-        this.durationTicks = durationTicks;
+    public void reload() {
+        this.enabled = plugin.config().bossBar().enabled();
+        this.durationTicks = plugin.config().bossBar().durationTicks();
         if (!enabled) {
             removeCurrent();
         }
@@ -37,11 +39,7 @@ public class BossBars {
         if (!enabled) {
             return;
         }
-        if (Bukkit.isPrimaryThread()) {
-            showAsyncSafe(name);
-        } else {
-            plugin.getServer().getScheduler().runTask(plugin, () -> showAsyncSafe(name));
-        }
+        Threads.marshaled(plugin, () -> showAsyncSafe(name));
     }
 
     private void showAsyncSafe(Component name) {
@@ -53,7 +51,11 @@ public class BossBars {
             }
         }
         current = bar;
-        plugin.getServer().getScheduler().runTaskLater(plugin, () -> removeIfCurrent(bar), durationTicks);
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+            if (current == bar) {
+                removeCurrent();
+            }
+        }, durationTicks);
     }
 
     private void removeCurrent() {
@@ -66,11 +68,5 @@ public class BossBars {
             }
         }
         current = null;
-    }
-
-    private void removeIfCurrent(BossBar bar) {
-        if (current == bar) {
-            removeCurrent();
-        }
     }
 }

@@ -9,6 +9,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.tree.LiteralCommandNode;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
+
 import org.bukkit.command.CommandSender;
 
 import java.util.Map;
@@ -177,7 +178,7 @@ public class MineCICDCommand {
                         "date", entry.date(), "revision", entry.revision(),
                         "author", entry.author(), "message", Messages.escape(entry.message()))));
             }
-            messages.sendRaw(sender, messages.get("log-list-end"));
+            messages.sendRaw(sender, messages.get("log-list-end", Map.of()));
         });
         return Command.SINGLE_SUCCESS;
     }
@@ -188,12 +189,11 @@ public class MineCICDCommand {
                 messages.send(sender, "log-invalid-commit");
                 return;
             }
-            for (var line : messages.getList("log-single-commit", Map.of(
-                    "revision", entry.revision(), "author", entry.author(),
-                    "date", entry.date(), "message", Messages.escape(entry.message()),
-                    "changes", String.join(", ", entry.changes())))) {
-                messages.sendRaw(sender, line);
-            }
+            messages.sendList(sender, 
+                    "log-single-commit", Map.of(
+                        "revision", entry.revision(), "author", entry.author(),
+                        "date", entry.date(), "message", Messages.escape(entry.message()),
+                        "changes", String.join(", ", entry.changes())));
         });
         return Command.SINGLE_SUCCESS;
     }
@@ -203,29 +203,27 @@ public class MineCICDCommand {
             if (s == null) {
                 return;
             }
-            for (var line : messages.getList("status", Map.of(
+            messages.sendList(sender, "status", Map.of(
                     "branch", s.branch(), "remote", s.remote(),
                     "control-status", String.valueOf(service.controlActive()),
                     "control-address", service.controlAddress(),
                     "local-changes", String.valueOf(s.localChanges()),
-                    "remote-changes", String.valueOf(s.remoteChanges())))) {
-                messages.sendRaw(sender, line);
-            }
+                    "remote-changes", String.valueOf(s.remoteChanges())));
         });
         return Command.SINGLE_SUCCESS;
     }
 
     private int printDiff(CommandSender sender, boolean remote) {
         service.diff(sender, remote).thenAccept(changes -> {
-            messages.sendRaw(sender, messages.get(remote ? "diff-remote-header" : "diff-local-header"));
+            messages.sendRaw(sender, messages.get(remote ? "diff-remote-header" : "diff-local-header", Map.of()));
             if (changes == null || changes.isEmpty()) {
-                messages.sendRaw(sender, messages.get("diff-no-changes"));
+                messages.sendRaw(sender, messages.get("diff-no-changes", Map.of()));
             } else {
                 for (String change : changes) {
                     messages.sendRaw(sender, messages.get("diff-line", Map.of("change", Messages.escape(change))));
                 }
             }
-            messages.sendRaw(sender, messages.get("diff-end"));
+            messages.sendRaw(sender, messages.get("diff-end", Map.of()));
         });
         return Command.SINGLE_SUCCESS;
     }

@@ -14,7 +14,6 @@ import java.io.File;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -68,7 +67,7 @@ public class Messages {
         if (sender == null) {
             return;
         }
-        Threads.marshaled(plugin, () -> sender.sendMessage(plugin.messages().prefix().append(component)));
+        Threads.marshaled(plugin, () -> sender.sendMessage(prefix().append(component)));
     }
 
     public void sendRaw(CommandSender sender, Component component) {
@@ -79,11 +78,11 @@ public class Messages {
     }
 
     public void send(CommandSender sender, String path) {
-        send(sender, path, Map.of());
+        send(sender, get(path, Map.of()));
     }
 
     public void send(CommandSender sender, String path, Map<String, String> placeholders) {
-        send(sender, plugin.messages().get(path, placeholders));
+        send(sender, get(path, placeholders));
     }
 
     public void sendList(CommandSender sender, String path, Map<String, String> placeholders) {
@@ -91,34 +90,17 @@ public class Messages {
             return;
         }
         Threads.marshaled(plugin, () -> {
-            sender.sendMessage(plugin.messages().prefix());
-            List<Component> lines = plugin.messages().getList(path, placeholders);
-            for (Component line : lines) {
-                sender.sendMessage(line);
+            sender.sendMessage(prefix());
+            List<String> raw = config.getStringList(path);
+            final int len = raw.size();
+            for (int i = 0; i < len; i++) {
+                sender.sendMessage(format(raw.get(i), placeholders));
             }
         });
     }
 
-    public Component get(String path) {
-        return get(path, Map.of());
-    }
-
     public Component get(String path, Map<String, String> placeholders) {
         return format(config.getString(path, ""), placeholders);
-    }
-
-    public List<Component> getList(String path) {
-        return getList(path, Map.of());
-    }
-
-    public List<Component> getList(String path, Map<String, String> placeholders) {
-        List<String> raw = config.getStringList(path);
-        final int len = raw.size();
-        List<Component> formatted = new ArrayList<>(len);
-        for (int i = 0; i < len; i++) {
-            formatted.set(i, format(raw.get(i), placeholders));
-        }
-        return formatted;
     }
 
     public Component prefix() {
